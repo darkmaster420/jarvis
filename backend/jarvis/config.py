@@ -148,12 +148,18 @@ class TtsCfg:
 
 @dataclass
 class LlmCfg:
+    # "ollama" | "lm_studio" (OpenAI-compatible local server, e.g. LM Studio :1234)
     provider: str = "ollama"
     host: str = "http://127.0.0.1:11434"
     # If the API is down and `host` is loopback, try to start the Ollama app
     # (Windows, minimized) so the server comes up in the tray.
     auto_start_ollama: bool = True
     ollama_app_path: str | None = None  # optional; default search under LocalAppData/ProgramFiles
+    # LM Studio / OpenAI-compatible: base URL including /v1 (local server default below).
+    openai_base_url: str = "http://127.0.0.1:1234/v1"
+    openai_api_key: str = "lm-studio"
+    # Optional max output tokens (chat + vision); None = server default.
+    openai_max_tokens: int | None = None
     model: str = "qwen2.5vl:7b"
     system_prompt: str = "You are Jarvis, a helpful assistant."
     # Use one multimodal model for both text/tools and vision by default; this

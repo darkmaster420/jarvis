@@ -242,6 +242,23 @@ TOOLS_SPEC = [
     {
         "type": "function",
         "function": {
+            "name": "get_system_stats",
+            "description": (
+                "Read current CPU load, RAM usage, and battery (if any) from "
+                "this PC via psutil. Use when the user asks for PC/computer/"
+                "system status, performance, resource usage, or how hard the "
+                "machine is working. Do not refuse these questions — call this "
+                "tool instead of guessing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "remember",
             "description": (
                 "Save a durable fact about the user or their environment so "
@@ -580,11 +597,23 @@ def _norm(text: str) -> str:
     return re.sub(r"[^\w\s%]", " ", text.lower()).strip()
 
 
+def _openai_choice_message(resp: dict) -> dict | None:
+    ch = (resp.get("choices") or [])
+    if not ch or not isinstance(ch[0], dict):
+        return None
+    m = ch[0].get("message")
+    return m if isinstance(m, dict) else None
+
+
 def _extract_tool_calls(resp: Any) -> list[tuple[str, dict]]:
-    """Extract (name, args) pairs from an Ollama chat response."""
-    msg = getattr(resp, "message", None)
-    if msg is None and isinstance(resp, dict):
-        msg = resp.get("message")
+    """Extract (name, args) from an Ollama chat response or OpenAI-compatible JSON."""
+    msg: Any = None
+    if isinstance(resp, dict) and "choices" in resp:
+        msg = _openai_choice_message(resp)
+    else:
+        msg = getattr(resp, "message", None)
+        if msg is None and isinstance(resp, dict):
+            msg = resp.get("message")
     if msg is None:
         return []
     tool_calls = getattr(msg, "tool_calls", None)
@@ -658,15 +687,25 @@ def _parse_xml_tool_calls(content: str) -> list[tuple[str, dict]]:
 
 
 def _extract_content(resp: Any) -> str:
-    msg = getattr(resp, "message", None)
-    if msg is None and isinstance(resp, dict):
-        msg = resp.get("message")
+    msg: Any = None
+    if isinstance(resp, dict) and "choices" in resp:
+        msg = _openai_choice_message(resp)
+    else:
+        msg = getattr(resp, "message", None)
+        if msg is None and isinstance(resp, dict):
+            msg = resp.get("message")
     if msg is None:
         return ""
     content = getattr(msg, "content", None)
     if content is None and isinstance(msg, dict):
         content = msg.get("content")
-    return (content or "").strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for p in content:
+            if isinstance(p, dict) and p.get("type") == "text":
+                parts.append(str(p.get("text", "")))
+        return " ".join(parts).strip()
+    return (content or "").strip() if isinstance(content, str) else ""
 
 
 class Orchestrator:
@@ -685,15 +724,20 @@ class Orchestrator:
         self._history: deque[tuple[str, str]] = deque(maxlen=10)
         self._tool_support: dict[str, bool] = {}
         self._ollama = None
+        prov = (llm_cfg.provider or "ollama").lower().replace("-", "_")
+        if prov in ("lmstudio", "openai_compatible"):
+            prov = "lm_studio"
+        self._llm_provider = prov
         # Runtime-registered user skills (Stage 2). name -> (spec, callable)
         self._user_skills: dict[str, Callable[[dict], SkillResult]] = {}
         self._user_tool_specs: list[dict] = []
-        try:
-            import ollama
+        if self._llm_provider == "ollama":
+            try:
+                import ollama
 
-            self._ollama = ollama.Client(host=llm_cfg.host)
-        except Exception as e:  # pragma: no cover
-            log.warning("ollama client unavailable: %s", e)
+                self._ollama = ollama.Client(host=llm_cfg.host)
+            except Exception as e:  # pragma: no cover
+                log.warning("ollama client unavailable: %s", e)
 
         # Website / browser fast paths: models sometimes refuse to "use a
         # browser" instead of calling tools; these run on normalized text (see
@@ -751,7 +795,14 @@ class Orchestrator:
              lambda m, u: info_skill.date_today(), "date"),
             (re.compile(r"\b(weather|forecast)\b(?:\s+in\s+(?P<loc>.+))?"),
              lambda m, u: info_skill.weather(m.group("loc") or ""), "weather"),
-            (re.compile(r"\b(system|cpu|memory|ram|battery)\s*(stats|status|usage)?\b"),
+            (re.compile(
+                r"(?i)\b("
+                r"(system|cpu|processor|memory|ram|battery)\s*(stats|status|usage)?"
+                r"|(?:the\s+)?(pc|computer|machine|hardware)\s+"
+                r"(stats|status|usage|health|diagnostics?)"
+                r"|resource\s+usage\b"
+                r")\b"
+            ),
              lambda m, u: info_skill.system_stats(), "sys_stats"),
 
             (re.compile(r"\b(mute)\b"),
@@ -818,10 +869,59 @@ class Orchestrator:
         owner = (self.perms.owner or "").lower()
         return bool(owner) and user.lower() == owner
 
+    def _llm_ready(self) -> bool:
+        if self._llm_provider == "lm_studio":
+            return bool((self.llm_cfg.openai_base_url or "").strip())
+        return self._ollama is not None
+
+    def _lm_unreachable_msg(self) -> str:
+        if self._llm_provider == "lm_studio":
+            return (
+                "I could not reach the LM Studio API. Open LM Studio, load a model, "
+                "turn on the local server (Developer → Start Server), and ensure "
+                f"the URL matches llm.openai_base_url in config "
+                f"(default {self.llm_cfg.openai_base_url})."
+            )
+        return "I couldn't reach the language model. Is Ollama running?"
+
+    def _lm_native_chat(
+        self,
+        *,
+        model: str,
+        messages: list,
+        tools: list | None,
+        temperature: float,
+        max_tokens: int | None = None,
+    ) -> Any:
+        if self._llm_provider == "ollama":
+            opts: dict[str, Any] = {"temperature": temperature}
+            if max_tokens is not None:
+                opts["num_predict"] = max_tokens
+            kw: dict[str, Any] = dict(model=model, messages=messages, options=opts)
+            if tools:
+                kw["tools"] = tools
+            if self._ollama is None:
+                raise RuntimeError("Ollama client is not available")
+            return self._ollama.chat(**kw)
+        from .openai_compat import chat_completions
+
+        mt = max_tokens
+        if mt is None:
+            mt = getattr(self.llm_cfg, "openai_max_tokens", None)
+        return chat_completions(
+            self.llm_cfg.openai_base_url,
+            self.llm_cfg.openai_api_key,
+            model,
+            messages,
+            tools=tools,
+            temperature=temperature,
+            max_tokens=mt,
+        )
+
     def _unload_ollama_model(self, model: str) -> None:
         """Best-effort unload to free RAM/VRAM before switching models."""
         model = (model or "").strip()
-        if not model or self._ollama is None:
+        if not model or self._ollama is None or self._llm_provider != "ollama":
             return
         try:
             # Ollama's documented unload path is generate/chat with
@@ -836,20 +936,27 @@ class Orchestrator:
         (click, type, …) → repeat. Uses ``llm.vision_model``, not the main
         text-only coder model.
         """
-        if self._ollama is None:
+        if not self._llm_ready():
             return SkillResult(
-                "Ollama is not available; I cannot run a vision model.",
+                self._lm_unreachable_msg(),
                 intent="desktop", success=False,
             )
         primary_vm = (getattr(self.llm_cfg, "vision_model", None) or "").strip()
         if not primary_vm:
-            return SkillResult(
-                "Desktop vision is off: set `llm.vision_model` in config "
-                "to a vision model, e.g. qwen2.5vl:7b, then run: "
-                f"ollama pull qwen2.5vl:7b  "
-                f"(qwen3-coder and other text-only models cannot see the screen.)",
-                intent="desktop", success=False,
-            )
+            if self._llm_provider == "lm_studio":
+                hint = (
+                    "Desktop vision is off: set `llm.vision_model` in config to a "
+                    "VLM id exactly as listed by LM Studio (GET /v1/models). "
+                    "Text-only models cannot see the screen."
+                )
+            else:
+                hint = (
+                    "Desktop vision is off: set `llm.vision_model` in config "
+                    "to a vision model, e.g. qwen2.5vl:7b, then run: "
+                    "ollama pull qwen2.5vl:7b "
+                    "(qwen3-coder and other text-only models cannot see the screen.)"
+                )
+            return SkillResult(hint, intent="desktop", success=False)
         vision_models = [primary_vm]
         for fallback in getattr(self.llm_cfg, "vision_fallback_models", []) or []:
             fb = str(fallback).strip()
@@ -860,7 +967,8 @@ class Orchestrator:
         # and vision use the same multimodal model, keep it warm to avoid slow
         # unload/reload cycles.
         if (self.llm_cfg.model or "").strip() != primary_vm:
-            self._unload_ollama_model(self.llm_cfg.model)
+            if self._llm_provider == "ollama":
+                self._unload_ollama_model(self.llm_cfg.model)
         max_w = int(getattr(self.llm_cfg, "vision_max_screenshot_w", 1280) or 1280)
         max_r = int(getattr(self.llm_cfg, "vision_desktop_rounds", 3) or 3)
         max_r = max(1, min(20, max_r))
@@ -921,15 +1029,28 @@ class Orchestrator:
                 if vm in bad_vision_models:
                     continue
                 try:
-                    # Some Ollama VLMs (including qwen2.5vl) reject native
-                    # `tools` together with image input (HTTP 400). Use a JSON
-                    # action protocol instead: same desktop actions, no
-                    # tool-call field for Ollama to reject.
-                    resp = self._ollama.chat(
-                        model=vm,
-                        messages=messages,
-                        options=vis_opts,
-                    )
+                    # Ollama VLMs often reject `tools` with images (HTTP 400). LM
+                    # Studio uses the same JSON-in-content protocol here.
+                    if self._llm_provider == "lm_studio":
+                        from .openai_compat import (
+                            chat_completions,
+                            ollama_messages_to_openai,
+                        )
+                        resp = chat_completions(
+                            self.llm_cfg.openai_base_url,
+                            self.llm_cfg.openai_api_key,
+                            vm,
+                            ollama_messages_to_openai(messages),
+                            tools=None,
+                            temperature=float(vis_opts.get("temperature", 0.0)),
+                            max_tokens=max(64, n_pred),
+                        )
+                    else:
+                        resp = self._ollama.chat(
+                            model=vm,
+                            messages=messages,
+                            options=vis_opts,
+                        )
                     if vm != primary_vm:
                         log.info("vision using fallback model: %s", vm)
                     break
@@ -1045,6 +1166,7 @@ class Orchestrator:
             "reopen_closed_browser_tab": "reopen_closed_browser_tab",
             "web_search": "web_search",
             "open_url":   "open_url",
+            "get_system_stats": "sys_stats",
         }.get(name, name)
         if not self._authorised(intent, user):
             return RESTRICTED_DENIED
@@ -1064,6 +1186,8 @@ class Orchestrator:
         if name == "open_url":
             url = (args.get("url") or "").strip()
             return web.open_url(url)
+        if name == "get_system_stats":
+            return info_skill.system_stats()
         if name == "remember":
             if self.memory is None:
                 return SkillResult("Memory isn't configured.",
@@ -1341,7 +1465,7 @@ class Orchestrator:
         user: str,
         on_status: Callable[[str], None] | None = None,
     ) -> SkillResult:
-        if self._ollama is None:
+        if not self._llm_ready():
             return SkillResult(
                 "I don't have a language model available right now.",
                 intent="chat", success=False,
@@ -1357,28 +1481,40 @@ class Orchestrator:
             effective_text = text
             for attempt in range(2):
                 try:
-                    resp = self._ollama.chat(
+                    resp = self._lm_native_chat(
                         model=model,
                         messages=self._build_messages(
                             effective_text, user, "native",
                             skill_authoring=skill_boost,
                         ),
                         tools=all_tools,
-                        options={"temperature": 0.3},
+                        temperature=0.3,
                     )
                 except Exception as e:
                     msg = str(e)
+                    err_resp = getattr(e, "response", None)
+                    if err_resp is not None:
+                        try:
+                            msg = (
+                                f"{msg} {err_resp.status_code} "
+                                f"{(err_resp.text or '')[:1200]}"
+                            )
+                        except Exception:
+                            pass
                     if ("does not support tools" in msg
-                            or "tools" in msg.lower() and "400" in msg):
+                            or "tools" in msg.lower() and "400" in msg
+                            or (self._llm_provider == "lm_studio"
+                                and "400" in msg
+                                and "tool" in msg.lower())):
                         log.info(
                             "model %s lacks native tools; using prompt-based fallback",
                             model,
                         )
                         self._tool_support[model] = False
                         break
-                    log.warning("ollama chat failed: %s", e)
+                    log.warning("llm chat failed: %s", e)
                     return SkillResult(
-                        "I couldn't reach the language model. Is Ollama running?",
+                        self._lm_unreachable_msg(),
                         intent="chat", success=False,
                     )
                 self._tool_support[model] = True
@@ -1414,12 +1550,13 @@ class Orchestrator:
             effective = text
             resp = None
             for attempt in range(2):
-                resp = self._ollama.chat(
+                resp = self._lm_native_chat(
                     model=model,
                     messages=self._build_messages(
                         effective, user, "prompt", skill_authoring=skill_boost,
                     ),
-                    options={"temperature": 0.2},
+                    tools=None,
+                    temperature=0.2,
                 )
                 content = _extract_content(resp)
                 parsed = self._parse_prompted_tool(content)
@@ -1459,9 +1596,9 @@ class Orchestrator:
                     on_status=on_status,
                 )
         except Exception as e:
-            log.warning("ollama chat fallback failed: %s", e)
+            log.warning("llm chat fallback failed: %s", e)
             return SkillResult(
-                "I couldn't reach the language model. Is Ollama running?",
+                self._lm_unreachable_msg(),
                 intent="chat", success=False,
             )
 
@@ -1557,6 +1694,17 @@ class Orchestrator:
         return sorted(self._user_skills.keys())
 
     def list_models(self) -> list[str]:
+        if self._llm_provider == "lm_studio":
+            try:
+                from .openai_compat import list_models as openai_list_models
+
+                return openai_list_models(
+                    self.llm_cfg.openai_base_url,
+                    self.llm_cfg.openai_api_key,
+                )
+            except Exception as e:
+                log.warning("lm studio list models failed: %s", e)
+                return []
         if self._ollama is None:
             return []
         try:

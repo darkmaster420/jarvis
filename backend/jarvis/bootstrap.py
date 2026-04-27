@@ -180,6 +180,15 @@ def ensure_ollama_models(cfg) -> None:
     """Pull ``vision_model`` and ``llm.model`` if not already on disk. Blocking;
     run from a worker thread. Uses the Ollama HTTP API (same as Jarvis, no
     separate ``ollama`` CLI on PATH)."""
+    prov = (getattr(cfg.llm, "provider", "ollama") or "ollama").lower().replace(
+        "-", "_"
+    )
+    if prov in ("lm_studio", "lmstudio", "openai_compatible"):
+        log.info(
+            "LLM provider is LM Studio / OpenAI-compatible API — skipping Ollama "
+            "install and pulls. Load a model in LM Studio and start the local server."
+        )
+        return
     try:
         import ollama
     except ImportError:

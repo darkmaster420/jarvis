@@ -785,14 +785,14 @@ void Hud::render() {
         dl->AddCircleFilled(c, r_hub, IM_COL32(15, 20, 30, 255), 16);
     }
 
-    // Pending-patches indicator to the left of the gear. Only shown when
-    // there are proposed patches waiting; click opens the review panel.
+    // Patches / self-edit review: always visible (left of gear). Amber + badge
+    // when there are pending proposals; muted when empty. Same as F3.
     size_t pending = 0;
     {
         std::lock_guard<std::mutex> lk(state_.patches_mutex);
         pending = state_.pending_patches.size();
     }
-    if (pending > 0) {
+    {
         const float size = 28.0f;
         const float pad  = 10.0f;
         ImVec2 btn_pos(kWinW - size * 2 - pad * 2, pad);
@@ -805,22 +805,35 @@ void Hud::render() {
         }
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetItemRectMin();
-        ImU32 amber = hovered ? IM_COL32(255, 200, 100, 255)
-                              : IM_COL32(230, 170, 70,  220);
-        // bell / doc icon: simple rounded rect with a stroke
         ImVec2 a(p.x + 4, p.y + 3);
         ImVec2 b(p.x + size - 4, p.y + size - 3);
-        dl->AddRectFilled(a, b, amber, 3.0f);
-        dl->AddRect(a, b, IM_COL32(30, 20, 10, 255), 3.0f, 0, 1.5f);
-        // badge with count
-        char buf[8];
-        std::snprintf(buf, sizeof(buf), "%zu", pending);
-        ImVec2 ts = ImGui::CalcTextSize(buf);
-        ImVec2 bc(b.x + 2, p.y - 2);
-        float br = std::max(9.0f, ts.x * 0.5f + 4.0f);
-        dl->AddCircleFilled(bc, br, IM_COL32(230, 60, 60, 255), 12);
-        dl->AddText(ImVec2(bc.x - ts.x * 0.5f, bc.y - ts.y * 0.5f),
-                    IM_COL32(255, 255, 255, 255), buf);
+        if (pending > 0) {
+            ImU32 amber = hovered ? IM_COL32(255, 200, 100, 255)
+                                  : IM_COL32(230, 170, 70,  220);
+            dl->AddRectFilled(a, b, amber, 3.0f);
+            dl->AddRect(a, b, IM_COL32(30, 20, 10, 255), 3.0f, 0, 1.5f);
+            char buf[8];
+            std::snprintf(buf, sizeof(buf), "%zu", pending);
+            ImVec2 ts = ImGui::CalcTextSize(buf);
+            ImVec2 bc(b.x + 2, p.y - 2);
+            float br = std::max(9.0f, ts.x * 0.5f + 4.0f);
+            dl->AddCircleFilled(bc, br, IM_COL32(230, 60, 60, 255), 12);
+            dl->AddText(ImVec2(bc.x - ts.x * 0.5f, bc.y - ts.y * 0.5f),
+                        IM_COL32(255, 255, 255, 255), buf);
+        } else {
+            ImU32 doc = show_patches_
+                ? IM_COL32(100, 220, 160, 255)
+                : (hovered ? IM_COL32(200, 230, 255, 200)
+                            : IM_COL32(120, 150, 190, 140));
+            dl->AddRectFilled(a, b, doc, 3.0f);
+            dl->AddRect(a, b, IM_COL32(40, 50, 70, 180), 3.0f, 0, 1.2f);
+            // subtle "diff" hint: two short lines inside
+            float mx = (a.x + b.x) * 0.5f;
+            dl->AddLine(ImVec2(mx - 6, a.y + 7), ImVec2(mx + 6, a.y + 7),
+                        IM_COL32(20, 30, 45, 200), 1.2f);
+            dl->AddLine(ImVec2(mx - 4, a.y + 11), ImVec2(mx + 8, a.y + 11),
+                        IM_COL32(20, 30, 45, 160), 1.2f);
+        }
     }
 
     // Log toggle icon: stack of horizontal lines, sits at kWinW - size*3 - pad*3.

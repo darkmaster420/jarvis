@@ -58,17 +58,15 @@ tts:
     fallback_cooldown_s: 600
 
 llm:
-  provider: "ollama"
+  # lm_studio = OpenAI-compatible API (LM Studio :1234/v1). ollama = llm.host
+  provider: "lm_studio"
   host: "http://127.0.0.1:11434"
-  # Single multimodal model for chat/tools + screen vision. This avoids slow
-  # unloading/reloading between a text model and a vision model.
-  # Upgrade path for stronger vision/reasoning (if hardware can handle it):
-  #   ollama pull qwen2.5vl:32b
-  #   set both model and vision_model to "qwen2.5vl:32b"
-  model: "qwen2.5vl:7b"
-  vision_model: "qwen2.5vl:7b"
-  # Used automatically if the primary VLM cannot start (often memory pressure).
-  vision_fallback_models: ["gemma3:4b"]
+  openai_base_url: "http://127.0.0.1:1234/v1"
+  openai_api_key: "lm-studio"
+  # Exact id from LM Studio (Local Server / GET /v1/models). For Ollama use provider: ollama.
+  model: "qwen2.5-vl-7b-instruct"
+  vision_model: "qwen2.5-vl-7b-instruct"
+  vision_fallback_models: []
   # Wider screenshot helps the VLM find text and buttons (a bit more VRAM/time).
   vision_max_screenshot_w: 1024
   # More steps = can scroll to find off-screen items; each step calls the VLM once.
