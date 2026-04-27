@@ -711,6 +711,27 @@ def _openai_choice_message(resp: dict) -> dict | None:
     return m if isinstance(m, dict) else None
 
 
+def _openai_finish_reason(resp: Any) -> str:
+    if not isinstance(resp, dict):
+        return ""
+    ch = (resp.get("choices") or [])
+    if not ch or not isinstance(ch[0], dict):
+        return ""
+    r = ch[0].get("finish_reason")
+    return str(r or "").strip().lower()
+
+
+def _skill_authoring_tool_specs(all_specs: list[dict]) -> list[dict]:
+    keep = {"propose_patch", "create_user_skill"}
+    out: list[dict] = []
+    for spec in all_specs:
+        fn = spec.get("function", {}) if isinstance(spec, dict) else {}
+        name = fn.get("name")
+        if name in keep:
+            out.append(spec)
+    return out or all_specs
+
+
 def _extract_tool_calls(resp: Any) -> list[tuple[str, dict]]:
     """Extract (name, args) from an Ollama chat response or OpenAI-compatible JSON."""
     msg: Any = None
@@ -1527,6 +1548,17 @@ class Orchestrator:
         sys_prompt = self.llm_cfg.system_prompt
         if tool_style == "prompt":
             sys_prompt = sys_prompt + "\n\n" + self._prompt_tool_instructions()
+        elif skill_authoring:
+            # Keep skill-authoring native prompts compact to preserve token budget
+            # for a large propose_patch(new_content=...) tool call.
+            sys_prompt = sys_prompt + (
+                "\n"
+                "SKILL AUTHORING MODE (native tool call):\n"
+                "- Use ONLY propose_patch or create_user_skill.\n"
+                "- Prefer propose_patch on user_skills/skills.py (or absolute path).\n"
+                "- Do NOT invent tool names.\n"
+                "- Return a valid tool call, not prose.\n"
+            ) + self._skills_bundle_location_hint()
         else:
             sys_prompt = sys_prompt + (
                 "\n"
@@ -1627,6 +1659,9 @@ class Orchestrator:
 
         # Try native tool calling first if we haven't ruled it out.
         all_tools = TOOLS_SPEC + self._user_tool_specs
+        native_tools = (
+            _skill_authoring_tool_specs(all_tools) if skill_boost else all_tools
+        )
         if native_supported is not False:
             effective_text = text
             for attempt in range(native_attempts):
@@ -1637,7 +1672,7 @@ class Orchestrator:
                             effective_text, user, "native",
                             skill_authoring=skill_boost,
                         ),
-                        tools=all_tools,
+                        tools=native_tools,
                         temperature=0.3,
                     )
                 except Exception as e:
@@ -1670,12 +1705,27 @@ class Orchestrator:
                 self._tool_support[model] = True
                 tool_calls = _extract_tool_calls(resp)
                 narration = _extract_content(resp)
+                finish_reason = _openai_finish_reason(resp)
                 # Some models (qwen3-coder) emit XML-style tool calls inside
                 # the content instead of via tool_calls. Harvest those too.
                 if "<function=" in narration:
                     tool_calls += _parse_xml_tool_calls(narration)
                     narration = _XML_FN_RE.sub("", narration)
                     narration = re.sub(r"</?tool_call>", "", narration).strip()
+                if skill_boost and not tool_calls and finish_reason == "length":
+                    log.warning(
+                        "skill authoring: native pass hit finish_reason=length; retry %s/%s",
+                        attempt,
+                        native_attempts - 1,
+                    )
+                    if attempt < native_attempts - 1:
+                        effective_text = (
+                            text
+                            + "\n\n[Previous output was truncated before a valid tool call. "
+                            "Retry with ONE compact tool call only. Do not emit reasoning. "
+                            "Call propose_patch now.]"
+                        )
+                        continue
                 if (skill_boost and tool_calls
                         and not _skill_authoring_tool_calls_ok(tool_calls)):
                     log.warning(
