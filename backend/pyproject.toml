@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "Fully-local Jarvis voice assistant backend"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Jarvis" }]
+dependencies = [
+    "numpy>=1.26",
+    "sounddevice>=0.4.6",
+    "soundfile>=0.12.1",
+    "pyyaml>=6.0.1",
+    "websockets>=12.0",
+    "openwakeword>=0.6.0",
+    "silero-vad>=5.1",
+    "faster-whisper>=1.0.3",
+    "resemblyzer>=0.1.4",
+    "piper-tts>=1.2.0",
+    "ollama>=0.3.3",
+    "psutil>=5.9.8",
+    "requests>=2.32",
+    "keyboard>=0.13.5",
+    "pycaw>=20240210; sys_platform == 'win32'",
+    "pywin32>=306; sys_platform == 'win32'",
+    "comtypes>=1.4.1; sys_platform == 'win32'",
+]
+
+[project.scripts]
+jarvis = "jarvis.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jarvis*"]

@@ -1,0 +1,93 @@
+# Jarvis configuration
+audio:
+  sample_rate: 16000
+  frame_ms: 20
+  input_device: null  # null = default mic; set to device index or substring name
+  output_device: null
+
+wake_word:
+  # Any number of wake words. Each entry must be either:
+  #   * a built-in openWakeWord name: hey_jarvis, alexa, hey_mycroft, hey_rhasspy
+  #   * an absolute path to a trained custom *.onnx file
+  # "hi jarvis" / "hello jarvis" / just "jarvis" require training a custom
+  # model - see https://github.com/dscripka/openWakeWord#training-custom-models
+  models:
+    - "hey_jarvis"
+  threshold: 0.5          # global default
+  thresholds: {}          # optional per-model overrides, e.g. { alexa: 0.6 }
+  cooldown_s: 1.5
+
+vad:
+  threshold: 0.5
+  min_silence_ms: 700
+  max_utterance_s: 15
+  pre_roll_ms: 300
+
+stt:
+  model: "base.en"        # tiny.en | base.en | small.en | medium.en
+  device: "auto"           # auto | cpu | cuda
+  compute_type: "int8"     # int8 | float16 | float32
+  beam_size: 1
+
+speaker_id:
+  enabled: true
+  threshold: 0.72   # lower = easier to match you (more false accepts); 0.68–0.78 typical
+  profiles_dir: "profiles"
+  # Phrases collected per enrollment or "add more samples" session (2–32).
+  enroll_samples: 8
+  # Drop segments shorter than this (seconds); raise if users cut off too early.
+  enroll_min_utterance_s: 1.4
+
+tts:
+  # auto = ElevenLabs first, fall back to Piper when out of credits or offline
+  # elevenlabs = cloud only (no audio if it fails)
+  # piper = local only
+  provider: "auto"
+  voice: "en_US-lessac-medium"   # Piper voice
+  speaker: 0
+  length_scale: 1.0
+  elevenlabs:
+    # Leave blank to use the ELEVENLABS_API_KEY env var or set via HUD.
+    # Saved keys live in state.json (not committed).
+    api_key: "sk_e7b89d1b34a54ff180eb5ff4015c2c9388ad196e45dba992"
+    voice_id: "lxYfHSkYm1EzQzGhdbfc"   # "Rachel"
+    voice_name: "Jessica"
+    model_id: "eleven_turbo_v2_5"
+    output_format: "pcm_22050"
+    fallback_cooldown_s: 600
+
+llm:
+  provider: "ollama"
+  host: "http://127.0.0.1:11434"
+  # Single multimodal model for chat/tools + screen vision. This avoids slow
+  # unloading/reloading between a text model and a vision model.
+  # Upgrade path for stronger vision/reasoning (if hardware can handle it):
+  #   ollama pull qwen2.5vl:32b
+  #   set both model and vision_model to "qwen2.5vl:32b"
+  model: "qwen2.5vl:7b"
+  vision_model: "qwen2.5vl:7b"
+  # Used automatically if the primary VLM cannot start (often memory pressure).
+  vision_fallback_models: ["gemma3:4b"]
+  # Wider screenshot helps the VLM find text and buttons (a bit more VRAM/time).
+  vision_max_screenshot_w: 1024
+  # More steps = can scroll to find off-screen items; each step calls the VLM once.
+  vision_desktop_rounds: 8
+  vision_post_action_s: 0.18
+  vision_num_predict: 384
+  system_prompt: |
+    You are Jarvis, a concise, helpful personal assistant for a PC user.
+    Keep replies short (1-3 sentences) unless asked to elaborate.
+    Address the user by their name when known.
+
+server:
+  host: "127.0.0.1"
+  port: 8765
+
+permissions:
+  # Skills gated to specific speaker profiles. Use "*" for anyone, "guest" blocks unknown.
+  owner: "bertie"
+  restricted_intents:
+    - shutdown
+    - sleep
+    - lock
+    - desktop

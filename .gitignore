@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# C++ / CMake
+frontend/build/
+frontend/out/
+frontend/cmake-build-*/
+*.obj
+*.exe
+*.pdb
+*.ilk
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Local scratch / test output
+.scratch/
+
+# Models & user data (downloaded/generated at runtime)
+models/*
+!models/.gitkeep
+profiles/*
+!profiles/.gitkeep
+
+# Runtime state (may contain API keys)
+state.json
+memory/
+proposed_patches/
+user_skills/*.py
+!user_skills/.gitkeep
+backend.log
+
+# OS
+Thumbs.db
+.DS_Store

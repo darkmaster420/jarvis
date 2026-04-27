@@ -1,0 +1,18 @@
+---
+description: Bump Windows installer + HUD version when finishing user-facing Jarvis work.
+alwaysApply: true
+---
+
+# Installer and HUD version (release hygiene)
+
+When you **finish** a change that affects what ships to users (backend, HUD, installer packaging, or behavior worth versioning):
+
+1. **Bump the app version in lockstep** (patch for fixes/small features, minor for larger features):
+   - `installer/jarvis.iss`: `#define MyAppVersion`, and the two **4-part** fields `VersionInfoVersion` and `VersionInfoProductVersion` (e.g. `0.2.1.0` for app version `0.2.1`).
+   - `frontend/CMakeLists.txt`: default `JARVIS_HUD_VERSION` (shown in the HUD bottom-right; must match the release you are cutting).
+
+2. **Do not** leave these files on an older version than the last shipped behavior unless intentionally holding a release.
+
+3. **Optional build**: With Inno Setup 6 installed, `scripts\build_installer.ps1` produces `dist\installer\JarvisSetup-<version>.exe` (re-run `package_windows.ps1` first or omit `-SkipPackage` for a full stage).
+
+This project expects the agent to perform the version bump as part of completing the task, not as a follow-up the user must remember.
