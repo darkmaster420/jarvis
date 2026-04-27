@@ -47,41 +47,87 @@ class PatchError(ValueError):
     pass
 
 
+def _resolve_patch_target(
+    repo: Path,
+    raw: str,
+    *,
+    user_skills_dir: Path | None = None,
+) -> tuple[str, Path]:
+    """Map a propose_patch target string to (canonical relative path, abs path).
+
+    Accepts the usual virtual paths (``user_skills/skills.py``, ``backend/...``)
+    or an **absolute** path that resolves inside the user_skills data directory
+    or the repo — so models can pass the real on-disk bundle path.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        raise PatchError("empty target path")
+
+    repo_r = repo.resolve()
+    us_r = (
+        Path(user_skills_dir).resolve()
+        if user_skills_dir is not None
+        else None
+    )
+
+    p_in = Path(raw)
+    if p_in.is_absolute():
+        abs_in = p_in.expanduser().resolve()
+        rel_canon: str | None = None
+        if us_r is not None:
+            try:
+                sub = abs_in.relative_to(us_r)
+                rel_canon = "user_skills/" + sub.as_posix()
+            except ValueError:
+                pass
+        if rel_canon is None:
+            try:
+                sub = abs_in.relative_to(repo_r)
+                rel_canon = sub.as_posix()
+            except ValueError:
+                raise PatchError(
+                    "target must be inside the app/repo tree or the Jarvis "
+                    "user_skills data folder (typically …/user_skills/skills.py "
+                    "under %LocalAppData%/Jarvis or your configured data dir)"
+                )
+    else:
+        rel_canon = raw.replace("\\", "/")
+
+    if ".." in rel_canon.split("/"):
+        raise PatchError("target path may not contain '..'")
+    if not any(rel_canon.startswith(p) for p in ALLOWED_PATCH_PREFIXES):
+        raise PatchError(
+            f"target must be inside one of: {', '.join(ALLOWED_PATCH_PREFIXES)}")
+    if rel_canon in BANNED_PATCH_PATHS:
+        raise PatchError(f"{rel_canon} is on the patch denylist")
+    if rel_canon.startswith("user_skills/"):
+        if us_r is None:
+            raise PatchError("user_skills/ targets require a user data directory")
+        sub = rel_canon[len("user_skills/") :]
+        if not sub or sub.startswith("/"):
+            raise PatchError("invalid user_skills path")
+        abs_path = (us_r / sub).resolve()
+        try:
+            abs_path.relative_to(us_r)
+        except ValueError:
+            raise PatchError("user_skills target escapes user_skills directory")
+        return rel_canon, abs_path
+    abs_path = (repo_r / rel_canon).resolve()
+    try:
+        abs_path.relative_to(repo_r)
+    except ValueError:
+        raise PatchError("target escapes the repo root")
+    return rel_canon, abs_path
+
+
 def _norm_target(
     repo: Path,
     rel: str,
     *,
     user_skills_dir: Path | None = None,
 ) -> Path:
-    rel = (rel or "").strip().replace("\\", "/")
-    if not rel:
-        raise PatchError("empty target path")
-    if ".." in rel.split("/"):
-        raise PatchError("target path may not contain '..'")
-    if not any(rel.startswith(p) for p in ALLOWED_PATCH_PREFIXES):
-        raise PatchError(
-            f"target must be inside one of: {', '.join(ALLOWED_PATCH_PREFIXES)}")
-    if rel in BANNED_PATCH_PATHS:
-        raise PatchError(f"{rel} is on the patch denylist")
-    # ``user_skills/*`` lives under per-user data (e.g. %LocalAppData%/Jarvis/user_skills),
-    # not under the read-only install tree.
-    if rel.startswith("user_skills/"):
-        if user_skills_dir is None:
-            raise PatchError("user_skills/ targets require a user data directory")
-        sub = rel[len("user_skills/") :]
-        if not sub or sub.startswith("/"):
-            raise PatchError("invalid user_skills path")
-        abs_path = (user_skills_dir / sub).resolve()
-        try:
-            abs_path.relative_to(user_skills_dir.resolve())
-        except ValueError:
-            raise PatchError("user_skills target escapes user_skills directory")
-        return abs_path
-    abs_path = (repo / rel).resolve()
-    try:
-        abs_path.relative_to(repo.resolve())
-    except ValueError:
-        raise PatchError("target escapes the repo root")
+    _, abs_path = _resolve_patch_target(
+        repo, rel, user_skills_dir=user_skills_dir)
     return abs_path
 
 
@@ -176,7 +222,7 @@ class PatchManager:
             raise PatchError("description is required")
         if not new_content.endswith("\n"):
             new_content = new_content + "\n"
-        abs_path = _norm_target(
+        rel_canon, abs_path = _resolve_patch_target(
             self.root, target, user_skills_dir=self.user_skills_dir)
         if not abs_path.exists():
             raise PatchError(
@@ -191,12 +237,11 @@ class PatchManager:
             except SyntaxError as e:
                 raise PatchError(f"proposed content has a syntax error: {e}")
 
-        patch_id = _sha(f"{target}|{new_content}|{time.time()}|{uuid.uuid4()}")
-        diff = _unified_diff(before, new_content,
-                             label=Path(target).as_posix())
+        patch_id = _sha(f"{rel_canon}|{new_content}|{time.time()}|{uuid.uuid4()}")
+        diff = _unified_diff(before, new_content, label=rel_canon)
         record = {
             "id":            patch_id,
-            "target":        Path(target).as_posix(),
+            "target":        rel_canon,
             "description":   description,
             "created":       time.time(),
             "before_sha":    _sha(before),
@@ -205,7 +250,7 @@ class PatchManager:
         }
         self._patch_path(patch_id).write_text(
             json.dumps(record, indent=2), encoding="utf-8")
-        log.info("patch proposed: %s -> %s", patch_id, target)
+        log.info("patch proposed: %s -> %s", patch_id, rel_canon)
         return {k: v for k, v in record.items() if k != "new_content"}
 
     # ------------------------------------------------------------------

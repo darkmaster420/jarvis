@@ -64,7 +64,12 @@ Big picture:
   return helpful errors in ``reply`` instead of raising when possible.
 
 3) propose_patch rules for this file
-- ``target`` must be exactly: ``user_skills/skills.py``
+- ``target`` must identify the bundle. Use the virtual path ``user_skills/skills.py``
+  **or** the **absolute path** to ``skills.py`` on this machine (forward slashes
+  are fine on Windows). The server resolves both to the same file under your
+  Jarvis data directory. A concrete path for *this* PC is injected in the system
+  prompt block ``USER SKILLS — FILE LOCATION`` when available — copy that string
+  if you are unsure.
 - ``new_content`` must be the ENTIRE file (complete valid Python from first
   line to last). Never send a unified diff or a fragment.
 - You must base the file on the latest full ``skills.py`` text you have in
@@ -422,8 +427,11 @@ TOOLS_SPEC = [
                     "target": {
                         "type": "string",
                         "description": (
-                            "Exactly ``user_skills/skills.py`` for skill bundle "
-                            "edits, or ``backend/jarvis/<path>.py`` for core code."
+                            "For the skills bundle: ``user_skills/skills.py`` "
+                            "or the absolute on-disk path to ``skills.py`` (same "
+                            "file; see USER SKILLS — FILE LOCATION in instructions). "
+                            "For core code: ``backend/jarvis/<path>.py`` under the "
+                            "install/repo."
                         ),
                     },
                     "description": {
@@ -564,10 +572,41 @@ _DESKTOP_VISION_PAT = re.compile(
 )
 
 _CREATE_SKILL_PAT = re.compile(
-    r"\b("
-    r"create|make|build|write|add|author"
-    r")\s+(?:me\s+)?(?:a\s+)?(?:new\s+)?(?:jarvis\s+)?skill\b|\b"
-    r"(?:new\s+)?skill\s+(?:that|to|for)\b",
+    r"(?:"
+    # make/create/... a (new) (jarvis) skill | custom tool
+    r"\b(?:create|make|build|write|add|author)\s+"
+    r"(?:me\s+)?(?:a\s+)?(?:new\s+)?"
+    r"(?:(?:jarvis\s+)?(?:skill|skills)\b|custom\s+tool\b)"
+    r"|"
+    r"\b(?:create|make|build|write|add|author)\s+"
+    r"(?:me\s+)?(?:a\s+)?(?:new\s+)?custom\s+tool\s+(?:that|to|for)\b"
+    r"|"
+    # skill(s) that/to/for/which ...
+    r"\b(?:new\s+)?(?:user\s+)?(?:skill|skills)\s+(?:that|to|for|which)\b"
+    r"|"
+    r"\b(?:new\s+)?(?:user\s+)?skill\s+for\b"
+    r"|"
+    # I want / need a skill
+    r"\b(?:i\s+)?(?:want|need|would\s+like)\s+"
+    r"(?:a\s+)?(?:new\s+)?(?:jarvis\s+)?(?:skill|skills)\b"
+    r"|"
+    # can you make ... skill / custom tool
+    r"\b(?:can|could)\s+you\s+(?:please\s+)?"
+    r"(?:make|create|add|build|write)\s+"
+    r"(?:me\s+)?(?:a\s+)?(?:new\s+)?"
+    r"(?:(?:jarvis\s+)?(?:skill|skills)|custom\s+tool)\b"
+    r"|"
+    # define / design / implement a skill
+    r"\b(?:define|design|implement|extend)\s+"
+    r"(?:a\s+)?(?:new\s+)?(?:user\s+)?(?:skill|skills)\b"
+    r"|"
+    # add a tool to Jarvis
+    r"\b(?:add|create)\s+(?:a\s+)?(?:new\s+)?(?:custom\s+)?tool\s+to\s+"
+    r"(?:jarvis|my\s+assistant)\b"
+    r"|"
+    # teach Jarvis a skill
+    r"\bteach\s+(?:jarvis\s+)?(?:a\s+)?(?:new\s+)?(?:skill|skills)\b"
+    r")",
     re.I,
 )
 
@@ -586,10 +625,77 @@ def _wants_user_skill(text: str) -> bool:
 def _skill_authoring_tool_calls_ok(
     tool_calls: list[tuple[str, dict]],
 ) -> bool:
-    """True if the model chose an actual skill-authoring tool."""
-    return any(
+    """True if every tool call is skill authoring (no mixed hallucinated names)."""
+    if not tool_calls:
+        return False
+    return all(
         name in ("propose_patch", "create_user_skill")
-        for name, _ in (tool_calls or [])
+        for name, _ in tool_calls
+    )
+
+
+def _skill_authoring_invented_tool_names(
+    tool_calls: list[tuple[str, dict]],
+) -> list[str]:
+    return sorted({
+        n for n, _ in (tool_calls or [])
+        if n not in ("propose_patch", "create_user_skill")
+    })
+
+
+def _skill_authoring_native_nudge(
+    tool_calls: list[tuple[str, dict]],
+    attempt: int,
+) -> str:
+    bad = _skill_authoring_invented_tool_names(tool_calls)
+    if not bad:
+        tool_phrase = "Invented tool names are not available on this host"
+    elif len(bad) == 1:
+        tool_phrase = f"{bad[0]!r} is not a real tool on this host"
+    else:
+        tool_phrase = (
+            f"{', '.join(repr(n) for n in bad)} are not real tools on this host"
+        )
+    msg = (
+        "\n\n[SKILL AUTHORING — You must call the tool propose_patch (full-file "
+        "replace of user_skills/skills.py) or create_user_skill only. "
+        f"{tool_phrase}. Use only propose_patch or create_user_skill in tool_calls. "
+        "Implement the user request as a new SKILLS entry + handle_<name> inside "
+        "the bundle text from the system message; copy that entire file into "
+        "new_content, edit it, then call propose_patch.]"
+    )
+    if attempt >= 2:
+        msg += (
+            "\n[Final warning: any tool name other than propose_patch or "
+            "create_user_skill will be rejected. Use propose_patch with "
+            "target, description, and new_content (complete Python file).]"
+        )
+    return msg
+
+
+def _skill_authoring_prompt_nudge(pname: str, attempt: int) -> str:
+    msg = (
+        "\n\n[SKILL AUTHORING — Your JSON must use "
+        '"tool": "propose_patch" (or "create_user_skill") only. '
+        f"You used {pname!r}, which is not a valid tool. "
+        "Emit propose_patch with the full updated skills.py from the system "
+        "message as new_content.]"
+    )
+    if attempt >= 2:
+        msg += (
+            '\n[Last retry: one line, {"tool":"propose_patch","args":{'
+            '"target":"user_skills/skills.py","description":"…",'
+            '"new_content":"…full file…"}}]'
+        )
+    return msg
+
+
+def _skill_authoring_exhausted_reply() -> str:
+    return (
+        "I should add that as a skill in your user_skills bundle via "
+        "propose_patch, but the model kept calling a made-up tool name instead "
+        "of propose_patch. Please try again in one short sentence, or open the "
+        "patch panel and approve if a patch was already proposed."
     )
 
 
@@ -1294,11 +1400,22 @@ class Orchestrator:
             except Exception as e:
                 return SkillResult(f"Patch rejected: {e}",
                                    intent="propose_patch", success=False)
-            return SkillResult(
-                f"I've proposed a patch to {rec['target']} - please approve "
-                "it in the HUD's patch review panel.",
-                intent="propose_patch",
+            msg = (
+                f"I've proposed a patch to {rec['target']} — please approve it "
+                "in the HUD's patch review panel."
             )
+            t = rec.get("target") or ""
+            if (
+                isinstance(t, str)
+                and t.startswith("user_skills/")
+                and self.user_skills_mgr is not None
+            ):
+                bundle = (Path(self.user_skills_mgr.dir) / "skills.py").resolve()
+                msg = (
+                    f"I've proposed a patch to {t} (file on disk: {bundle}) — "
+                    "please approve it in the HUD's patch review panel."
+                )
+            return SkillResult(msg, intent="propose_patch")
         # Dispatch to any user-authored skills registered at runtime.
         if name in self._user_skills:
             try:
@@ -1313,24 +1430,52 @@ class Orchestrator:
             intent="unknown_tool", success=False,
         )
 
+    def _skills_bundle_location_hint(self) -> str:
+        """Tell the model the real bundle path and a concrete propose_patch example."""
+        if self.user_skills_mgr is None:
+            return ""
+        bundle = (Path(self.user_skills_mgr.dir) / "skills.py").resolve()
+        posix = bundle.as_posix()
+        example = (
+            '{"tool": "propose_patch", "args": {"target": "'
+            + posix
+            + '", "description": "Add roll_dice tool", "new_content": "<paste '
+            'complete skills.py here>"}}'
+        )
+        return (
+            "\n=== USER SKILLS — FILE LOCATION (this PC) ===\n"
+            f"Editable bundle path:\n  {bundle}\n\n"
+            "For propose_patch, \"target\" may be user_skills/skills.py or "
+            f"this absolute path (forward slashes OK):\n  {posix}\n\n"
+            "Example (prompt-style single-line tool JSON):\n"
+            f"  {example}\n"
+        )
+
     def _skill_authoring_context(self) -> str:
         """Extra system text + live ``skills.py`` so the model can propose_patch."""
         body = ""
         if self.user_skills_mgr is not None:
             try:
-                p = Path(self.user_skills_mgr.dir) / "skills.py"
-                if p.is_file():
-                    body = p.read_text(encoding="utf-8")
-            except OSError as e:
+                body = self.user_skills_mgr.read_bundle_text()
+            except Exception as e:
                 log.debug("read skills bundle failed: %s", e)
+                body = ""
+        if not (body and body.strip()):
+            body = (
+                "# (skills.py unavailable — check Jarvis data directory permissions.)\n"
+            )
         return (
             "\n\n=== THIS TURN: SKILL AUTHORING ===\n"
             "The user asked to create, add, or change a Jarvis skill. "
-            "You MUST NOT call invented tool names (nothing like minimize_cursor "
-            "or close_foo) unless that exact name already appears in your tool list.\n"
-            "You MUST use ONLY: propose_patch (target user_skills/skills.py, "
-            "full updated file) OR create_user_skill (legacy single-file module).\n"
-            "Prefer propose_patch. Merge your change into the file below.\n\n"
+            "You MUST NOT call invented tool names (e.g. flip_coin, close_foo) — "
+            "those are not in the API. New behavior goes inside the file below via "
+            "propose_patch.\n"
+            "You MUST use ONLY: propose_patch (target user_skills/skills.py or the "
+            "absolute path from USER SKILLS — FILE LOCATION, full updated file) OR "
+            "create_user_skill (legacy single-file module).\n"
+            "Prefer propose_patch. Start from the ENTIRE file below; merge your "
+            "change so every existing SKILLS key and handle_* remains unless you "
+            "mean to remove one — never shrink the file to only the new tool.\n\n"
             f"Current user_skills/skills.py:\n```python\n{body}\n```\n"
         )
 
@@ -1347,6 +1492,9 @@ class Orchestrator:
             arg_names = ", ".join(params.keys())
             sig = f"{name}({arg_names})" if arg_names else f"{name}()"
             lines.append(f"  {sig} - {desc}")
+        hint = self._skills_bundle_location_hint()
+        if hint:
+            lines.append(hint.rstrip())
         lines.extend([
             "",
             "Tool selection rules:",
@@ -1415,7 +1563,7 @@ class Orchestrator:
                 "reply in plain text (1-2 sentences, no tool).\n"
                 "- Never describe what you would do - either do it by calling "
                 "a tool, or answer the question.\n\n"
-            ) + USER_SKILL_BUNDLE_GUIDE + "\n"
+            ) + USER_SKILL_BUNDLE_GUIDE + "\n" + self._skills_bundle_location_hint()
         if skill_authoring:
             sys_prompt = sys_prompt + self._skill_authoring_context()
         if user and user != "guest":
@@ -1474,12 +1622,14 @@ class Orchestrator:
         model = self.llm_cfg.model
         native_supported = self._tool_support.get(model, None)
         skill_boost = _wants_user_skill(text)
+        native_attempts = 4 if skill_boost else 2
+        prompt_attempts = 4 if skill_boost else 2
 
         # Try native tool calling first if we haven't ruled it out.
         all_tools = TOOLS_SPEC + self._user_tool_specs
         if native_supported is not False:
             effective_text = text
-            for attempt in range(2):
+            for attempt in range(native_attempts):
                 try:
                     resp = self._lm_native_chat(
                         model=model,
@@ -1529,18 +1679,23 @@ class Orchestrator:
                 if (skill_boost and tool_calls
                         and not _skill_authoring_tool_calls_ok(tool_calls)):
                     log.warning(
-                        "skill authoring: native pass returned %s; retry %s",
+                        "skill authoring: native pass returned %s; retry %s/%s",
                         [t[0] for t in tool_calls],
                         attempt,
+                        native_attempts - 1,
                     )
-                    if attempt == 0:
-                        effective_text = (
-                            text
-                            + "\n\n[You must call ONLY propose_patch with target "
-                            "user_skills/skills.py (full updated Python file) or "
-                            "create_user_skill. Do not call any other function.]"
+                    if attempt < native_attempts - 1:
+                        effective_text = text + _skill_authoring_native_nudge(
+                            tool_calls, attempt,
                         )
                         continue
+                    return self._finalise(
+                        text,
+                        [],
+                        narration=_skill_authoring_exhausted_reply(),
+                        user=user,
+                        on_status=on_status,
+                    )
                 return self._finalise(
                     text, tool_calls, narration, user, on_status=on_status
                 )
@@ -1549,7 +1704,7 @@ class Orchestrator:
         try:
             effective = text
             resp = None
-            for attempt in range(2):
+            for attempt in range(prompt_attempts):
                 resp = self._lm_native_chat(
                     model=model,
                     messages=self._build_messages(
@@ -1561,6 +1716,20 @@ class Orchestrator:
                 content = _extract_content(resp)
                 parsed = self._parse_prompted_tool(content)
                 if parsed is None:
+                    if skill_boost and attempt < prompt_attempts - 1:
+                        log.warning(
+                            "skill authoring: prompt pass returned no tool JSON; "
+                            "retry %s/%s",
+                            attempt,
+                            prompt_attempts - 1,
+                        )
+                        effective = (
+                            text
+                            + _skill_authoring_prompt_nudge(
+                                "(no tool in reply)", attempt,
+                            )
+                        )
+                        continue
                     return self._finalise(
                         text, [], narration=content, user=user,
                         on_status=on_status,
@@ -1569,25 +1738,20 @@ class Orchestrator:
                 if skill_boost and pname not in (
                         "propose_patch", "create_user_skill"):
                     log.warning(
-                        "skill authoring: prompt pass returned tool %r; retry %s",
-                        pname, attempt,
+                        "skill authoring: prompt pass returned tool %r; retry %s/%s",
+                        pname,
+                        attempt,
+                        prompt_attempts - 1,
                     )
-                    if attempt == 0:
-                        effective = (
-                            text
-                            + "\n\n[Use ONLY propose_patch (target "
-                            "user_skills/skills.py, full file) or "
-                            "create_user_skill. No other tool name.]"
+                    if attempt < prompt_attempts - 1:
+                        effective = text + _skill_authoring_prompt_nudge(
+                            pname, attempt,
                         )
                         continue
                     return self._finalise(
                         text,
                         [],
-                        narration=(
-                            "I tried to call a made-up tool instead of "
-                            "propose_patch. Please repeat what the new skill "
-                            "should do in one short sentence."
-                        ),
+                        narration=_skill_authoring_exhausted_reply(),
                         user=user,
                         on_status=on_status,
                     )

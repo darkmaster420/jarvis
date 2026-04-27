@@ -260,6 +260,16 @@ class UserSkillManager:
         if not bundle.exists():
             bundle.write_text(_DEFAULT_SKILLS_PY, encoding="utf-8")
 
+    def read_bundle_text(self) -> str:
+        """Ensure ``skills.py`` exists and return its full source for LLM prompts."""
+        self._ensure_bundle()
+        path = self.dir / "skills.py"
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as e:
+            log.warning("read_bundle_text failed: %s", e)
+            return _DEFAULT_SKILLS_PY
+
     # ------------------------------------------------------------------
     # loading
     # ------------------------------------------------------------------
