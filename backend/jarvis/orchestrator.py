@@ -14,6 +14,7 @@ from .config import LlmCfg, PermissionsCfg
 from .memory import Memory
 from .skills import desktop, media, system, web
 from .skills import info as info_skill
+from .skills import terminal as terminal_skill
 from .skills.base import SkillResult
 
 log = logging.getLogger(__name__)
@@ -124,6 +125,8 @@ def _tool_narration_message(
         )
     if "web_search" in names:
         return "Looking that up on the web."
+    if "run_terminal_command" in names:
+        return "Running that command in a local terminal."
     return None
 
 TOOLS_SPEC = [
@@ -258,6 +261,41 @@ TOOLS_SPEC = [
             "parameters": {
                 "type": "object",
                 "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_terminal_command",
+            "description": (
+                "Run a local shell command on this machine (PowerShell on Windows). "
+                "Use for ping, winget install/update/search, git commands, and "
+                "explicit terminal tasks including file edits/deletes. For "
+                "destructive commands (del/rm/remove-item/format/shutdown), set "
+                "allow_dangerous=true."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Exact command string to execute.",
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Optional working directory path.",
+                    },
+                    "timeout_s": {
+                        "type": "integer",
+                        "description": "Timeout in seconds (1-300). Default 25.",
+                    },
+                    "allow_dangerous": {
+                        "type": "boolean",
+                        "description": "Set true to allow destructive commands.",
+                    },
+                },
+                "required": ["command"],
             },
         },
     },
@@ -610,6 +648,17 @@ _CREATE_SKILL_PAT = re.compile(
     re.I,
 )
 
+_CREATE_CORE_CAPABILITY_PAT = re.compile(
+    r"(?:"
+    r"\b(?:add|build|implement|create)\s+(?:a\s+)?(?:core|built-?in|native)\s+"
+    r"(?:capability|feature|tool)\b"
+    r"|"
+    r"\b(?:so\s+it\s+can|teach\s+jarvis\s+to|make\s+jarvis\s+able\s+to)\b"
+    r".{0,120}\b(?:navigate|automate|email|winget|install|browser|website)\b"
+    r")",
+    re.I,
+)
+
 
 def _wants_desktop_vision(text: str) -> bool:
     t = (text or "").strip()
@@ -620,6 +669,11 @@ def _wants_desktop_vision(text: str) -> bool:
 
 def _wants_user_skill(text: str) -> bool:
     return bool(_CREATE_SKILL_PAT.search(text or ""))
+
+
+def _wants_core_capability(text: str) -> bool:
+    t = text or ""
+    return bool(_CREATE_CORE_CAPABILITY_PAT.search(t)) and not _wants_user_skill(t)
 
 
 def _skill_authoring_tool_calls_ok(
@@ -699,6 +753,29 @@ def _skill_authoring_exhausted_reply() -> str:
     )
 
 
+def _core_authoring_prompt_nudge(pname: str, attempt: int) -> str:
+    msg = (
+        "\n\n[CORE EXTENSION — For this request, do not call normal runtime tools. "
+        "Return only propose_patch for backend/jarvis/*.py so Jarvis gains a new "
+        f"built-in capability. You used {pname!r}.]"
+    )
+    if attempt >= 2:
+        msg += (
+            '\n[Last retry: emit one line JSON only: {"tool":"propose_patch",'
+            '"args":{"target":"backend/jarvis/<file>.py","description":"…",'
+            '"new_content":"…full file…"}}]'
+        )
+    return msg
+
+
+def _core_authoring_exhausted_reply() -> str:
+    return (
+        "I should implement that as a built-in backend capability via propose_patch "
+        "(backend/jarvis/*.py), but the model failed to return a valid patch tool "
+        "call. Please retry in one short sentence."
+    )
+
+
 def _norm(text: str) -> str:
     return re.sub(r"[^\w\s%]", " ", text.lower()).strip()
 
@@ -728,6 +805,15 @@ def _skill_authoring_tool_specs(all_specs: list[dict]) -> list[dict]:
         fn = spec.get("function", {}) if isinstance(spec, dict) else {}
         name = fn.get("name")
         if name in keep:
+            out.append(spec)
+    return out or all_specs
+
+
+def _core_authoring_tool_specs(all_specs: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for spec in all_specs:
+        fn = spec.get("function", {}) if isinstance(spec, dict) else {}
+        if fn.get("name") == "propose_patch":
             out.append(spec)
     return out or all_specs
 
@@ -1286,6 +1372,17 @@ class Orchestrator:
         return self._chat(text, user, on_status=on_status)
 
     def _run_tool(self, name: str, args: dict, user: str) -> SkillResult:
+        # Some models incorrectly call handler symbols (e.g. handle_roll_dice)
+        # instead of the exposed tool name (roll_dice). If that alias maps to
+        # a registered user skill, transparently dispatch it.
+        if (
+            isinstance(name, str)
+            and name.startswith("handle_")
+            and name[7:] in self._user_skills
+        ):
+            alias = name[7:]
+            log.info("rewriting tool alias %s -> %s", name, alias)
+            name = alias
         intent = {
             "open_app":   "open_app",
             "close_app":  "close_app",
@@ -1294,6 +1391,7 @@ class Orchestrator:
             "web_search": "web_search",
             "open_url":   "open_url",
             "get_system_stats": "sys_stats",
+            "run_terminal_command": "terminal_exec",
         }.get(name, name)
         if not self._authorised(intent, user):
             return RESTRICTED_DENIED
@@ -1315,6 +1413,18 @@ class Orchestrator:
             return web.open_url(url)
         if name == "get_system_stats":
             return info_skill.system_stats()
+        if name == "run_terminal_command":
+            timeout_raw = args.get("timeout_s")
+            try:
+                timeout_s = int(timeout_raw) if timeout_raw is not None else 25
+            except (TypeError, ValueError):
+                timeout_s = 25
+            return terminal_skill.run(
+                command=(args.get("command") or "").strip(),
+                cwd=(args.get("cwd") or "").strip() or None,
+                timeout_s=timeout_s,
+                allow_dangerous=bool(args.get("allow_dangerous", False)),
+            )
         if name == "remember":
             if self.memory is None:
                 return SkillResult("Memory isn't configured.",
@@ -1500,6 +1610,16 @@ class Orchestrator:
             f"Current user_skills/skills.py:\n```python\n{body}\n```\n"
         )
 
+    def _core_authoring_context(self) -> str:
+        return (
+            "\n\n=== THIS TURN: CORE EXTENSION ===\n"
+            "The user requested a built-in capability that likely needs backend "
+            "changes (not only user_skills). Use propose_patch targeting "
+            "backend/jarvis/*.py with FULL file content. Choose the smallest "
+            "relevant file(s) and include safe validation/error handling. "
+            "Do not call invented tools; emit propose_patch.\n"
+        )
+
     def _prompt_tool_instructions(self) -> str:
         specs = TOOLS_SPEC + self._user_tool_specs
         lines = [
@@ -1528,6 +1648,7 @@ class Orchestrator:
             "- If the user asks to close a browser tab (not the whole browser), use close_browser_tab; use reopen_closed_browser_tab to undo.",
             "- If the user asks to open/launch/start an app or URL, use open_app or open_url.",
             "- Never claim you cannot open websites or have no browser; use open_app/open_url and the system default browser.",
+            "- For explicit shell/terminal requests (ping, winget, git, command line file ops), use run_terminal_command. Set allow_dangerous=true for destructive commands.",
             "",
             USER_SKILL_BUNDLE_GUIDE,
             "",
@@ -1544,10 +1665,19 @@ class Orchestrator:
         tool_style: str,
         *,
         skill_authoring: bool = False,
+        core_authoring: bool = False,
     ) -> list[dict[str, Any]]:
         sys_prompt = self.llm_cfg.system_prompt
         if tool_style == "prompt":
             sys_prompt = sys_prompt + "\n\n" + self._prompt_tool_instructions()
+        elif core_authoring:
+            sys_prompt = sys_prompt + (
+                "\n"
+                "CORE EXTENSION MODE (native tool call):\n"
+                "- Use ONLY propose_patch.\n"
+                "- Target backend/jarvis/<file>.py for built-in capability updates.\n"
+                "- Return one valid tool call, no prose/reasoning.\n"
+            )
         elif skill_authoring:
             # Keep skill-authoring native prompts compact to preserve token budget
             # for a large propose_patch(new_content=...) tool call.
@@ -1580,6 +1710,9 @@ class Orchestrator:
                 "or cannot open websites on Windows.\n"
                 "- If the user asks you to search, google, or look something "
                 "up online: call web_search.\n"
+                "- If the user asks for terminal/shell commands (ping, winget, "
+                "git, command-line file operations), call run_terminal_command. "
+                "For destructive commands, set allow_dangerous=true.\n"
                 "- CAPABILITY GAP: when nothing above fits but the user still "
                 "wants a concrete action, use web_search if you need current "
                 "facts, then propose_patch on user_skills/skills.py with the "
@@ -1598,6 +1731,8 @@ class Orchestrator:
             ) + USER_SKILL_BUNDLE_GUIDE + "\n" + self._skills_bundle_location_hint()
         if skill_authoring:
             sys_prompt = sys_prompt + self._skill_authoring_context()
+        if core_authoring:
+            sys_prompt = sys_prompt + self._core_authoring_context()
         if user and user != "guest":
             sys_prompt = sys_prompt + f"\nThe speaker's name is {user.title()}."
         if self.memory is not None:
@@ -1654,13 +1789,16 @@ class Orchestrator:
         model = self.llm_cfg.model
         native_supported = self._tool_support.get(model, None)
         skill_boost = _wants_user_skill(text)
-        native_attempts = 4 if skill_boost else 2
-        prompt_attempts = 4 if skill_boost else 2
+        core_boost = _wants_core_capability(text)
+        native_attempts = 4 if (skill_boost or core_boost) else 2
+        prompt_attempts = 4 if (skill_boost or core_boost) else 2
 
         # Try native tool calling first if we haven't ruled it out.
         all_tools = TOOLS_SPEC + self._user_tool_specs
         native_tools = (
-            _skill_authoring_tool_specs(all_tools) if skill_boost else all_tools
+            _skill_authoring_tool_specs(all_tools) if skill_boost
+            else _core_authoring_tool_specs(all_tools) if core_boost
+            else all_tools
         )
         if native_supported is not False:
             effective_text = text
@@ -1671,6 +1809,7 @@ class Orchestrator:
                         messages=self._build_messages(
                             effective_text, user, "native",
                             skill_authoring=skill_boost,
+                            core_authoring=core_boost,
                         ),
                         tools=native_tools,
                         temperature=0.3,
@@ -1726,6 +1865,19 @@ class Orchestrator:
                             "Call propose_patch now.]"
                         )
                         continue
+                if core_boost and not tool_calls and finish_reason == "length":
+                    log.warning(
+                        "core authoring: native pass hit finish_reason=length; retry %s/%s",
+                        attempt,
+                        native_attempts - 1,
+                    )
+                    if attempt < native_attempts - 1:
+                        effective_text = (
+                            text
+                            + "\n\n[Previous output was truncated. Return ONE compact "
+                            "propose_patch tool call only, no prose.]"
+                        )
+                        continue
                 if (skill_boost and tool_calls
                         and not _skill_authoring_tool_calls_ok(tool_calls)):
                     log.warning(
@@ -1746,6 +1898,25 @@ class Orchestrator:
                         user=user,
                         on_status=on_status,
                     )
+                if core_boost and tool_calls:
+                    bad = [n for n, _ in tool_calls if n != "propose_patch"]
+                    if bad:
+                        log.warning(
+                            "core authoring: native pass returned %s; retry %s/%s",
+                            bad,
+                            attempt,
+                            native_attempts - 1,
+                        )
+                        if attempt < native_attempts - 1:
+                            effective_text = (
+                                text
+                                + _core_authoring_prompt_nudge(", ".join(bad), attempt)
+                            )
+                            continue
+                        return self._finalise(
+                            text, [], narration=_core_authoring_exhausted_reply(),
+                            user=user, on_status=on_status,
+                        )
                 return self._finalise(
                     text, tool_calls, narration, user, on_status=on_status
                 )
@@ -1759,6 +1930,7 @@ class Orchestrator:
                     model=model,
                     messages=self._build_messages(
                         effective, user, "prompt", skill_authoring=skill_boost,
+                        core_authoring=core_boost,
                     ),
                     tools=None,
                     temperature=0.2,
@@ -1766,19 +1938,19 @@ class Orchestrator:
                 content = _extract_content(resp)
                 parsed = self._parse_prompted_tool(content)
                 if parsed is None:
-                    if skill_boost and attempt < prompt_attempts - 1:
+                    if (skill_boost or core_boost) and attempt < prompt_attempts - 1:
                         log.warning(
-                            "skill authoring: prompt pass returned no tool JSON; "
+                            "authoring: prompt pass returned no tool JSON; "
                             "retry %s/%s",
                             attempt,
                             prompt_attempts - 1,
                         )
-                        effective = (
-                            text
-                            + _skill_authoring_prompt_nudge(
-                                "(no tool in reply)", attempt,
-                            )
+                        nudge = (
+                            _skill_authoring_prompt_nudge("(no tool in reply)", attempt)
+                            if skill_boost
+                            else _core_authoring_prompt_nudge("(no tool in reply)", attempt)
                         )
+                        effective = text + nudge
                         continue
                     return self._finalise(
                         text, [], narration=content, user=user,
@@ -1804,6 +1976,22 @@ class Orchestrator:
                         narration=_skill_authoring_exhausted_reply(),
                         user=user,
                         on_status=on_status,
+                    )
+                if core_boost and pname != "propose_patch":
+                    log.warning(
+                        "core authoring: prompt pass returned tool %r; retry %s/%s",
+                        pname,
+                        attempt,
+                        prompt_attempts - 1,
+                    )
+                    if attempt < prompt_attempts - 1:
+                        effective = text + _core_authoring_prompt_nudge(
+                            pname, attempt,
+                        )
+                        continue
+                    return self._finalise(
+                        text, [], narration=_core_authoring_exhausted_reply(),
+                        user=user, on_status=on_status,
                     )
                 return self._finalise(
                     text, [parsed], narration="", user=user,

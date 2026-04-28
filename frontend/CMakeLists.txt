@@ -87,7 +87,7 @@ set_target_properties(jarvis_hud PROPERTIES OUTPUT_NAME "jarvis")
 # Shown in the HUD (bottom-right) and should match the Windows installer
 # (installer/jarvis.iss) when you cut a release. CACHE FORCE so a stale
 # JARVIS_HUD_VERSION from an older first configure cannot stick at e.g. 0.2.0.
-set(JARVIS_HUD_VERSION "0.2.5" CACHE STRING "HUD / release version label" FORCE)
+set(JARVIS_HUD_VERSION "0.2.12" CACHE STRING "HUD / release version label" FORCE)
 target_compile_definitions(jarvis_hud PRIVATE
     "JARVIS_HUD_VERSION_STR=\"${JARVIS_HUD_VERSION}\""
 )

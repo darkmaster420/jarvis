@@ -81,7 +81,8 @@ bool BackendLauncher::portInUse(unsigned short port) {
     return in_use;
 }
 
-bool BackendLauncher::start(std::string& info) {
+bool BackendLauncher::start(std::string& info, bool dev_reload,
+                            double reload_interval_s) {
     info.clear();
     fs::path app_root = exeDir();
     log_path_ = app_root / "backend.log";
@@ -157,6 +158,13 @@ bool BackendLauncher::start(std::string& info) {
     std::wstringstream cmd;
     cmd << L"\"" << python.wstring() << L"\" -m jarvis.main"
         << L" --install-root \"" << repo.wstring() << L"\"";
+    if (dev_reload) {
+        int reload_ms = static_cast<int>(reload_interval_s * 1000.0);
+        if (reload_ms < 200) reload_ms = 200;
+        reload_interval_s = static_cast<double>(reload_ms) / 1000.0;
+        cmd << L" --dev-reload --reload-interval "
+            << std::to_wstring(reload_interval_s);
+    }
     std::wstring cmdline = cmd.str();
 
     STARTUPINFOW si{};
@@ -204,6 +212,7 @@ bool BackendLauncher::start(std::string& info) {
     process_ = pi.hProcess;
     spawned_ = true;
     info = "backend spawned (pid " + std::to_string(pi.dwProcessId) +
+           (dev_reload ? ", dev-reload ON" : "") +
            "); logs: " + fromWide(log_path.wstring());
     return true;
 }

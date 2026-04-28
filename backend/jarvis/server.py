@@ -9,6 +9,7 @@ import asyncio
 import enum
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -31,6 +32,33 @@ from .bootstrap import start_ollama_bootstrap_thread
 from .skills.system import prewarm_start_menu_cache
 
 log = logging.getLogger(__name__)
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_MD_FENCE_RE = re.compile(r"```(?:\w+)?\s*([\s\S]*?)```")
+_MD_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+_MD_EMPH_RE = re.compile(r"(?<!\w)(\*\*|__|\*|_|~~)(.+?)\1(?!\w)")
+_LINE_PREFIX_RE = re.compile(r"(?m)^\s{0,3}(?:[-*+]|\d+\.)\s+")
+
+
+def _clean_for_speech(text: str) -> str:
+    """Strip common markdown/styling artifacts before TTS/HUD output."""
+    t = (text or "").strip()
+    if not t:
+        return ""
+    t = _MD_LINK_RE.sub(r"\1", t)
+    t = _MD_FENCE_RE.sub(lambda m: (m.group(1) or "").strip(), t)
+    t = _MD_INLINE_CODE_RE.sub(r"\1", t)
+    # Run emphasis cleanup a few times to catch nested formatting.
+    for _ in range(3):
+        nt = _MD_EMPH_RE.sub(r"\2", t)
+        if nt == t:
+            break
+        t = nt
+    t = _LINE_PREFIX_RE.sub("", t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
 
 
 class State(str, enum.Enum):
@@ -463,13 +491,14 @@ class JarvisServer:
         if turn_id != self._turn_id:
             log.info("discarding LLM result from interrupted turn")
             return
-        await self.broadcast("reply", text=result.reply, intent=result.intent,
+        clean_reply = _clean_for_speech(result.reply)
+        await self.broadcast("reply", text=clean_reply, intent=result.intent,
                              success=result.success)
         if result.intent == "propose_patch":
             patches = await asyncio.to_thread(self.patches.list_patches)
             await self.broadcast("patches", items=patches)
         if turn_id == self._turn_id:
-            await self._speak(result.reply, turn_id=turn_id)
+            await self._speak(clean_reply, turn_id=turn_id)
 
     def _enroll_continue(self) -> None:
         async def _later() -> None:
@@ -481,24 +510,26 @@ class JarvisServer:
 
     async def _think_speak(self, turn_id: int, text: str) -> None:
         """Brief TTS + HUD line while still in THINKING (LLM running in thread)."""
-        if turn_id != self._turn_id or not text.strip():
+        spoken = _clean_for_speech(text)
+        if turn_id != self._turn_id or not spoken.strip():
             return
         async with self._narration_lock:
             if turn_id != self._turn_id:
                 return
-            await self.broadcast("narration_start", text=text)
+            await self.broadcast("narration_start", text=spoken)
             done = asyncio.Event()
 
             def on_end() -> None:
                 self.loop.call_soon_threadsafe(done.set)
 
-            self.tts.speak(text.strip(), on_end=on_end)
+            self.tts.speak(spoken.strip(), on_end=on_end)
             await done.wait()
             if turn_id != self._turn_id:
                 return
             await self.broadcast("narration_end")
 
     async def _speak(self, text: str, *, turn_id: int | None = None) -> None:
+        text = _clean_for_speech(text)
         if turn_id is not None and turn_id != self._turn_id:
             return
         if not text:

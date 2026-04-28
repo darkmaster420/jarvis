@@ -23,7 +23,8 @@ public:
     // Returns false only on unexpected errors; a "skip" (backend already
     // running, no python interpreter bundled, etc.) is not treated as an
     // error. On skip, spawned() returns false.
-    bool start(std::string& info);
+    bool start(std::string& info, bool dev_reload = false,
+               double reload_interval_s = 0.8);
     void stop();
 
     bool spawned() const { return spawned_; }
