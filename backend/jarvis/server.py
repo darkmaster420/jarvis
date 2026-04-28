@@ -268,6 +268,9 @@ class JarvisServer:
                 await self._process_text_prompt(text, user="guest")
         elif cmd == "list_settings":
             await self.broadcast("settings", **self._settings_snapshot())
+        elif cmd == "list_user_skills":
+            items = await asyncio.to_thread(self.user_skills.list)
+            await self.broadcast("user_skills", items=items)
         elif cmd == "set_llm_model":
             model = (msg.get("model") or "").strip()
             if model:

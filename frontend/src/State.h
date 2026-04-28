@@ -67,6 +67,12 @@ struct SharedState {
     std::vector<std::string>     available_tts_providers;
     std::vector<ElevenVoice>     available_elevenlabs_voices;
     std::vector<std::string>     available_profiles;
+    struct UserSkillItem {
+        std::string name;
+        std::string description;
+        std::string source;
+    };
+    std::vector<UserSkillItem>   available_user_skills;
 
     std::atomic<bool> enrolling{false};
     std::atomic<bool> enroll_refine{false};

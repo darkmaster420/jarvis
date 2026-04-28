@@ -205,6 +205,10 @@ void WsClient::requestSettings() {
     sendCommand("list_settings");
 }
 
+void WsClient::requestUserSkills() {
+    sendCommand("list_user_skills");
+}
+
 void WsClient::requestPatches() {
     sendCommand("list_patches");
 }
@@ -263,6 +267,7 @@ void WsClient::dispatch(const std::string& payload) {
             }
         }
         if (j.contains("settings")) applySettings(state_, j["settings"]);
+        requestUserSkills();
         requestPatches();
     } else if (ev == "profiles") {
         std::lock_guard<std::mutex> lk(state_.settings_mutex);
@@ -274,6 +279,18 @@ void WsClient::dispatch(const std::string& payload) {
         }
     } else if (ev == "settings") {
         applySettings(state_, j);
+    } else if (ev == "user_skills") {
+        std::lock_guard<std::mutex> lk(state_.settings_mutex);
+        state_.available_user_skills.clear();
+        if (j.contains("items") && j["items"].is_array()) {
+            for (const auto& it : j["items"]) {
+                SharedState::UserSkillItem s;
+                s.name = it.value("name", "");
+                s.description = it.value("description", "");
+                s.source = it.value("source", "");
+                if (!s.name.empty()) state_.available_user_skills.push_back(std::move(s));
+            }
+        }
     } else if (ev == "state") {
         state_.state = stateFromString(j.value("state", "idle"));
     } else if (ev == "wake") {

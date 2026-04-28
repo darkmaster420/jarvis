@@ -12,10 +12,11 @@ from typing import Any, Callable
 
 from .config import LlmCfg, PermissionsCfg
 from .memory import Memory
+from .prompt_builder import PromptBuilder
 from .skills import desktop, media, system, web
 from .skills import info as info_skill
-from .skills import terminal as terminal_skill
 from .skills.base import SkillResult
+from .tool_dispatcher import ToolDispatcher
 
 log = logging.getLogger(__name__)
 
@@ -780,6 +781,18 @@ def _norm(text: str) -> str:
     return re.sub(r"[^\w\s%]", " ", text.lower()).strip()
 
 
+_ROUTE_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "can", "could", "do",
+    "for", "from", "get", "give", "help", "how", "i", "if", "in", "is", "it",
+    "me", "my", "of", "on", "or", "please", "show", "tell", "that", "the",
+    "this", "to", "use", "what", "with", "you", "your",
+}
+
+
+def _tokenize_words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z0-9_]+", (text or "").lower()) if w]
+
+
 def _openai_choice_message(resp: dict) -> dict | None:
     ch = (resp.get("choices") or [])
     if not ch or not isinstance(ch[0], dict):
@@ -944,6 +957,22 @@ class Orchestrator:
         # Runtime-registered user skills (Stage 2). name -> (spec, callable)
         self._user_skills: dict[str, Callable[[dict], SkillResult]] = {}
         self._user_tool_specs: list[dict] = []
+        self._prompt_builder = PromptBuilder(
+            llm_cfg=self.llm_cfg,
+            memory=self.memory,
+            user_skills_mgr=self.user_skills_mgr,
+            user_tool_specs_ref=self._user_tool_specs,
+            user_skill_bundle_guide=USER_SKILL_BUNDLE_GUIDE,
+        )
+        self._tool_dispatcher = ToolDispatcher(
+            memory=self.memory,
+            user_skills_mgr=self.user_skills_mgr,
+            patches=self.patches,
+            user_skills_ref=self._user_skills,
+            authorised=self._authorised,
+            restricted_denied=RESTRICTED_DENIED,
+            handle_text=self.handle,
+        )
         if self._llm_provider == "ollama":
             try:
                 import ollama
@@ -1364,6 +1393,11 @@ class Orchestrator:
                     log.exception("skill '%s' failed", intent)
                     return SkillResult(f"That skill crashed: {e}",
                                        intent=intent, success=False)
+        auto_skill = self._auto_route_user_skill(text, user)
+        if auto_skill is not None:
+            self._history.append(("user", text))
+            self._history.append(("assistant", auto_skill.reply))
+            return auto_skill
         if _wants_desktop_vision(text):
             if not self._authorised("desktop", user):
                 log.info("denied intent=desktop for user=%s", user)
@@ -1372,291 +1406,19 @@ class Orchestrator:
         return self._chat(text, user, on_status=on_status)
 
     def _run_tool(self, name: str, args: dict, user: str) -> SkillResult:
-        # Some models incorrectly call handler symbols (e.g. handle_roll_dice)
-        # instead of the exposed tool name (roll_dice). If that alias maps to
-        # a registered user skill, transparently dispatch it.
-        if (
-            isinstance(name, str)
-            and name.startswith("handle_")
-            and name[7:] in self._user_skills
-        ):
-            alias = name[7:]
-            log.info("rewriting tool alias %s -> %s", name, alias)
-            name = alias
-        intent = {
-            "open_app":   "open_app",
-            "close_app":  "close_app",
-            "close_browser_tab": "close_browser_tab",
-            "reopen_closed_browser_tab": "reopen_closed_browser_tab",
-            "web_search": "web_search",
-            "open_url":   "open_url",
-            "get_system_stats": "sys_stats",
-            "run_terminal_command": "terminal_exec",
-        }.get(name, name)
-        if not self._authorised(intent, user):
-            return RESTRICTED_DENIED
-        if name == "close_browser_tab":
-            return web.close_browser_tab()
-        if name == "reopen_closed_browser_tab":
-            return web.reopen_closed_browser_tab()
-        if name == "open_app":
-            target = (args.get("name") or args.get("app") or "").strip()
-            return system.open_app(target)
-        if name == "close_app":
-            target = (args.get("name") or args.get("app") or "").strip()
-            return system.close_app(target)
-        if name == "web_search":
-            query = (args.get("query") or args.get("q") or "").strip()
-            return web.search(query)
-        if name == "open_url":
-            url = (args.get("url") or "").strip()
-            return web.open_url(url)
-        if name == "get_system_stats":
-            return info_skill.system_stats()
-        if name == "run_terminal_command":
-            timeout_raw = args.get("timeout_s")
-            try:
-                timeout_s = int(timeout_raw) if timeout_raw is not None else 25
-            except (TypeError, ValueError):
-                timeout_s = 25
-            return terminal_skill.run(
-                command=(args.get("command") or "").strip(),
-                cwd=(args.get("cwd") or "").strip() or None,
-                timeout_s=timeout_s,
-                allow_dangerous=bool(args.get("allow_dangerous", False)),
-            )
-        if name == "remember":
-            if self.memory is None:
-                return SkillResult("Memory isn't configured.",
-                                   intent="remember", success=False)
-            fact = (args.get("fact") or args.get("text") or "").strip()
-            tags = args.get("tags") or []
-            if not fact:
-                return SkillResult("Remember what?", intent="remember", success=False)
-            try:
-                self.memory.remember(fact, tags if isinstance(tags, list) else [])
-            except Exception as e:
-                return SkillResult(f"Couldn't save that: {e}",
-                                   intent="remember", success=False)
-            return SkillResult(f"Got it, I'll remember that.", intent="remember")
-        if name == "forget":
-            if self.memory is None:
-                return SkillResult("Memory isn't configured.",
-                                   intent="forget", success=False)
-            pattern = (args.get("pattern") or args.get("query") or "").strip()
-            removed = self.memory.forget(pattern) if pattern else 0
-            if removed:
-                return SkillResult(f"Forgot {removed} fact{'s' if removed != 1 else ''}.",
-                                   intent="forget")
-            return SkillResult("Nothing matched.", intent="forget", success=False)
-        if name == "add_alias":
-            if self.memory is None:
-                return SkillResult("Memory isn't configured.",
-                                   intent="add_alias", success=False)
-            phrase = (args.get("phrase") or "").strip()
-            target = (args.get("target") or "").strip()
-            if not phrase or not target:
-                return SkillResult("I need both a phrase and a target.",
-                                   intent="add_alias", success=False)
-            try:
-                self.memory.add_alias(phrase, target)
-            except Exception as e:
-                return SkillResult(f"Couldn't save alias: {e}",
-                                   intent="add_alias", success=False)
-            return SkillResult(f"Okay, '{phrase}' will open {target}.",
-                               intent="add_alias")
-        if name == "define_routine":
-            if self.memory is None:
-                return SkillResult("Memory isn't configured.",
-                                   intent="define_routine", success=False)
-            rname = (args.get("name") or "").strip()
-            steps = args.get("steps") or []
-            if not rname or not isinstance(steps, list) or not steps:
-                return SkillResult("Routines need a name and a list of steps.",
-                                   intent="define_routine", success=False)
-            try:
-                self.memory.define_routine(rname, [str(s) for s in steps])
-            except Exception as e:
-                return SkillResult(f"Couldn't save routine: {e}",
-                                   intent="define_routine", success=False)
-            return SkillResult(f"Routine '{rname}' saved with {len(steps)} step(s).",
-                               intent="define_routine")
-        if name == "run_routine":
-            if self.memory is None:
-                return SkillResult("Memory isn't configured.",
-                                   intent="run_routine", success=False)
-            rname  = (args.get("name") or "").strip()
-            steps  = self.memory.get_routine(rname) if rname else None
-            if not steps:
-                return SkillResult(f"I don't have a routine called '{rname}'.",
-                                   intent="run_routine", success=False)
-            replies: list[str] = []
-            ok_all = True
-            for step in steps:
-                log.info("routine %s step: %s", rname, step)
-                r = self.handle(step, user)
-                if not r.success:
-                    ok_all = False
-                if r.reply:
-                    replies.append(r.reply)
-            summary = f"Ran '{rname}': " + "; ".join(replies) if replies \
-                else f"Ran '{rname}'."
-            return SkillResult(summary, intent="run_routine", success=ok_all)
-        if name == "create_user_skill":
-            if self.user_skills_mgr is None:
-                return SkillResult("User-skill authoring isn't configured.",
-                                   intent="create_user_skill", success=False)
-            return self.user_skills_mgr.create(
-                (args.get("name") or "").strip(),
-                (args.get("description") or "").strip(),
-                args.get("code") or "",
-            )
-        if name == "remove_user_skill":
-            if self.user_skills_mgr is None:
-                return SkillResult("User-skill authoring isn't configured.",
-                                   intent="remove_user_skill", success=False)
-            return self.user_skills_mgr.remove(
-                (args.get("name") or "").strip()
-            )
-        if name == "propose_patch":
-            if self.patches is None:
-                return SkillResult("Patch system isn't configured.",
-                                   intent="propose_patch", success=False)
-            try:
-                rec = self.patches.propose(
-                    target=(args.get("target") or "").strip(),
-                    description=(args.get("description") or "").strip(),
-                    new_content=args.get("new_content") or "",
-                )
-            except Exception as e:
-                return SkillResult(f"Patch rejected: {e}",
-                                   intent="propose_patch", success=False)
-            msg = (
-                f"I've proposed a patch to {rec['target']} — please approve it "
-                "in the HUD's patch review panel."
-            )
-            t = rec.get("target") or ""
-            if (
-                isinstance(t, str)
-                and t.startswith("user_skills/")
-                and self.user_skills_mgr is not None
-            ):
-                bundle = (Path(self.user_skills_mgr.dir) / "skills.py").resolve()
-                msg = (
-                    f"I've proposed a patch to {t} (file on disk: {bundle}) — "
-                    "please approve it in the HUD's patch review panel."
-                )
-            return SkillResult(msg, intent="propose_patch")
-        # Dispatch to any user-authored skills registered at runtime.
-        if name in self._user_skills:
-            try:
-                return self._user_skills[name](args)
-            except Exception as e:
-                log.exception("user skill '%s' crashed", name)
-                return SkillResult(f"User skill {name!r} crashed: {e}",
-                                   intent=name, success=False)
-        log.warning("unknown tool call: %s(%s)", name, args)
-        return SkillResult(
-            f"I don't know how to do {name!r}.",
-            intent="unknown_tool", success=False,
-        )
+        return self._tool_dispatcher.run_tool(name, args, user)
 
     def _skills_bundle_location_hint(self) -> str:
-        """Tell the model the real bundle path and a concrete propose_patch example."""
-        if self.user_skills_mgr is None:
-            return ""
-        bundle = (Path(self.user_skills_mgr.dir) / "skills.py").resolve()
-        posix = bundle.as_posix()
-        example = (
-            '{"tool": "propose_patch", "args": {"target": "'
-            + posix
-            + '", "description": "Add roll_dice tool", "new_content": "<paste '
-            'complete skills.py here>"}}'
-        )
-        return (
-            "\n=== USER SKILLS — FILE LOCATION (this PC) ===\n"
-            f"Editable bundle path:\n  {bundle}\n\n"
-            "For propose_patch, \"target\" may be user_skills/skills.py or "
-            f"this absolute path (forward slashes OK):\n  {posix}\n\n"
-            "Example (prompt-style single-line tool JSON):\n"
-            f"  {example}\n"
-        )
+        return self._prompt_builder.skills_bundle_location_hint()
 
     def _skill_authoring_context(self) -> str:
-        """Extra system text + live ``skills.py`` so the model can propose_patch."""
-        body = ""
-        if self.user_skills_mgr is not None:
-            try:
-                body = self.user_skills_mgr.read_bundle_text()
-            except Exception as e:
-                log.debug("read skills bundle failed: %s", e)
-                body = ""
-        if not (body and body.strip()):
-            body = (
-                "# (skills.py unavailable — check Jarvis data directory permissions.)\n"
-            )
-        return (
-            "\n\n=== THIS TURN: SKILL AUTHORING ===\n"
-            "The user asked to create, add, or change a Jarvis skill. "
-            "You MUST NOT call invented tool names (e.g. flip_coin, close_foo) — "
-            "those are not in the API. New behavior goes inside the file below via "
-            "propose_patch.\n"
-            "You MUST use ONLY: propose_patch (target user_skills/skills.py or the "
-            "absolute path from USER SKILLS — FILE LOCATION, full updated file) OR "
-            "create_user_skill (legacy single-file module).\n"
-            "Prefer propose_patch. Start from the ENTIRE file below; merge your "
-            "change so every existing SKILLS key and handle_* remains unless you "
-            "mean to remove one — never shrink the file to only the new tool.\n\n"
-            f"Current user_skills/skills.py:\n```python\n{body}\n```\n"
-        )
+        return self._prompt_builder.skill_authoring_context()
 
     def _core_authoring_context(self) -> str:
-        return (
-            "\n\n=== THIS TURN: CORE EXTENSION ===\n"
-            "The user requested a built-in capability that likely needs backend "
-            "changes (not only user_skills). Use propose_patch targeting "
-            "backend/jarvis/*.py with FULL file content. Choose the smallest "
-            "relevant file(s) and include safe validation/error handling. "
-            "Do not call invented tools; emit propose_patch.\n"
-        )
+        return self._prompt_builder.core_authoring_context()
 
     def _prompt_tool_instructions(self) -> str:
-        specs = TOOLS_SPEC + self._user_tool_specs
-        lines = [
-            "You have these tools available. Use them when they match the user request:",
-        ]
-        for spec in specs:
-            fn = spec.get("function", {})
-            name = fn.get("name", "")
-            desc = " ".join(str(fn.get("description", "")).split())
-            params = fn.get("parameters", {}).get("properties", {})
-            arg_names = ", ".join(params.keys())
-            sig = f"{name}({arg_names})" if arg_names else f"{name}()"
-            lines.append(f"  {sig} - {desc}")
-        hint = self._skills_bundle_location_hint()
-        if hint:
-            lines.append(hint.rstrip())
-        lines.extend([
-            "",
-            "Tool selection rules:",
-            "- To add or change user tools, prefer propose_patch with target user_skills/skills.py and the FULL file: define SKILLS and handle_<name> for each tool; after HUD approval tools hot-reload. If you do not have the current file text in this conversation, ask the user to paste skills.py first so you do not erase existing tools.",
-            "- If the user asks you to create, make, build, write, add, or author a new Jarvis skill, use propose_patch on user_skills/skills.py (not create_user_skill) unless they explicitly want a separate legacy module.",
-            "- If the user wants something and NO existing tool can do it, add it to the skills bundle (after web_search for facts you do not know). Do not wait for the user to say 'create a skill'.",
-            "- Legacy create_user_skill writes a separate *.py file; use only when appropriate. Same sandbox: allowlisted stdlib; PARAMETERS and handle(args); never for keyboard/tab control (use close_browser_tab).",
-            "- If a requested skill needs unsafe actions such as subprocess, raw sockets, or arbitrary file I/O, explain the limitation instead of writing unsafe code.",
-            "- If the user asks to close/quit/exit/kill/stop an app, use close_app, never open_app.",
-            "- If the user asks to close a browser tab (not the whole browser), use close_browser_tab; use reopen_closed_browser_tab to undo.",
-            "- If the user asks to open/launch/start an app or URL, use open_app or open_url.",
-            "- Never claim you cannot open websites or have no browser; use open_app/open_url and the system default browser.",
-            "- For explicit shell/terminal requests (ping, winget, git, command line file ops), use run_terminal_command. Set allow_dangerous=true for destructive commands.",
-            "",
-            USER_SKILL_BUNDLE_GUIDE,
-            "",
-            "If a tool is needed, respond with EXACTLY one JSON object on a single line, no prose:",
-            "  {\"tool\": \"<name>\", \"args\": {<args>}}",
-            "If no tool is needed, reply in plain natural English (1-2 sentences), with NO JSON.",
-        ])
-        return "\n".join(lines)
+        return self._prompt_builder.prompt_tool_instructions(TOOLS_SPEC)
 
     def _build_messages(
         self,
@@ -1667,83 +1429,15 @@ class Orchestrator:
         skill_authoring: bool = False,
         core_authoring: bool = False,
     ) -> list[dict[str, Any]]:
-        sys_prompt = self.llm_cfg.system_prompt
-        if tool_style == "prompt":
-            sys_prompt = sys_prompt + "\n\n" + self._prompt_tool_instructions()
-        elif core_authoring:
-            sys_prompt = sys_prompt + (
-                "\n"
-                "CORE EXTENSION MODE (native tool call):\n"
-                "- Use ONLY propose_patch.\n"
-                "- Target backend/jarvis/<file>.py for built-in capability updates.\n"
-                "- Return one valid tool call, no prose/reasoning.\n"
-            )
-        elif skill_authoring:
-            # Keep skill-authoring native prompts compact to preserve token budget
-            # for a large propose_patch(new_content=...) tool call.
-            sys_prompt = sys_prompt + (
-                "\n"
-                "SKILL AUTHORING MODE (native tool call):\n"
-                "- Use ONLY propose_patch or create_user_skill.\n"
-                "- Prefer propose_patch on user_skills/skills.py (or absolute path).\n"
-                "- Do NOT invent tool names.\n"
-                "- Return a valid tool call, not prose.\n"
-            ) + self._skills_bundle_location_hint()
-        else:
-            sys_prompt = sys_prompt + (
-                "\n"
-                "TOOL USE RULES (VERY IMPORTANT):\n"
-                "- If the user asks you to open, launch, start, or run ANY "
-                "application, window, menu, or system page: you MUST call "
-                "open_app. Do NOT just say 'Opening X' - actually invoke the "
-                "tool. This includes phrases like 'open bluetooth settings', "
-                "'launch calc', 'open explorer', 'start spotify'.\n"
-                "- If the user asks you to close, quit, exit, kill, stop, or "
-                "terminate a running application (e.g. 'close chrome', 'quit "
-                "steam', 'kill discord'): you MUST call close_app with that "
-                "name. NEVER call open_app for close/quit/exit requests.\n"
-                "- If they ask to close a *tab* (browser tab or 'this tab'), call "
-                "close_browser_tab — not close_app (which would kill the whole browser).\n"
-                "- If the user asks you to go to, visit, or open a website or "
-                "URL: call open_url (or open_app for a named site like YouTube). "
-                "The OS default browser is used; never say you have no browser "
-                "or cannot open websites on Windows.\n"
-                "- If the user asks you to search, google, or look something "
-                "up online: call web_search.\n"
-                "- If the user asks for terminal/shell commands (ping, winget, "
-                "git, command-line file operations), call run_terminal_command. "
-                "For destructive commands, set allow_dangerous=true.\n"
-                "- CAPABILITY GAP: when nothing above fits but the user still "
-                "wants a concrete action, use web_search if you need current "
-                "facts, then propose_patch on user_skills/skills.py with the "
-                "full updated bundle (SKILLS + handle_<name> functions). Do it "
-                "proactively—do not ask the user to say 'create a skill' first, "
-                "and do not claim you 'cannot' when you can extend the bundle.\n"
-                "- If the user explicitly asks to create, make, build, write, add, "
-                "or author a new Jarvis skill: prefer propose_patch target "
-                "user_skills/skills.py; use create_user_skill only for a separate "
-                "legacy module. Only refuse if the task truly needs subprocess, "
-                "raw sockets, or arbitrary file access.\n"
-                "- For chit-chat or questions you can answer from knowledge, "
-                "reply in plain text (1-2 sentences, no tool).\n"
-                "- Never describe what you would do - either do it by calling "
-                "a tool, or answer the question.\n\n"
-            ) + USER_SKILL_BUNDLE_GUIDE + "\n" + self._skills_bundle_location_hint()
-        if skill_authoring:
-            sys_prompt = sys_prompt + self._skill_authoring_context()
-        if core_authoring:
-            sys_prompt = sys_prompt + self._core_authoring_context()
-        if user and user != "guest":
-            sys_prompt = sys_prompt + f"\nThe speaker's name is {user.title()}."
-        if self.memory is not None:
-            mem_block = self.memory.context_block(text)
-            if mem_block:
-                sys_prompt = sys_prompt + "\n\n" + mem_block
-        msgs: list[dict[str, Any]] = [{"role": "system", "content": sys_prompt}]
-        for role, content in self._history:
-            msgs.append({"role": role, "content": content})
-        msgs.append({"role": "user", "content": text})
-        return msgs
+        return self._prompt_builder.build_messages(
+            text,
+            user,
+            tool_style,
+            skill_authoring=skill_authoring,
+            core_authoring=core_authoring,
+            tools_spec=TOOLS_SPEC,
+            history=list(self._history),
+        )
 
     def _parse_prompted_tool(self, content: str) -> tuple[str, dict] | None:
         if not content:
@@ -2094,6 +1788,56 @@ class Orchestrator:
 
     def list_user_skills(self) -> list[str]:
         return sorted(self._user_skills.keys())
+
+    def _auto_route_user_skill(self, text: str, user: str) -> SkillResult | None:
+        """Best-effort auto-dispatch for obvious custom-skill requests.
+
+        Only dispatches when:
+        - request is not skill-authoring text
+        - a user skill has no required params
+        - lexical overlap between request and skill name/description is high
+        """
+        if not self._user_skills or _wants_user_skill(text):
+            return None
+        words = {
+            w for w in _tokenize_words(text)
+            if len(w) >= 3 and w not in _ROUTE_STOPWORDS
+        }
+        if not words:
+            return None
+
+        best_name = ""
+        best_score = 0
+        for spec in self._user_tool_specs:
+            fn = spec.get("function", {})
+            name = str(fn.get("name") or "").strip()
+            if not name or name not in self._user_skills:
+                continue
+            params = fn.get("parameters") or {}
+            req = params.get("required") or []
+            if req:
+                continue
+            desc = str(fn.get("description") or "")
+            skill_words = {
+                w for w in _tokenize_words(name.replace("_", " ") + " " + desc)
+                if len(w) >= 3 and w not in _ROUTE_STOPWORDS
+            }
+            if not skill_words:
+                continue
+            overlap = words & skill_words
+            score = len(overlap)
+            # Strong boost when the skill name itself appears in user text.
+            if name.lower().replace("_", " ") in _norm(text):
+                score += 3
+            if score > best_score:
+                best_name = name
+                best_score = score
+
+        # Require meaningful overlap to avoid false positives.
+        if not best_name or best_score < 2:
+            return None
+        log.info("auto-routing request to user skill %s (score=%s)", best_name, best_score)
+        return self._run_tool(best_name, {}, user)
 
     def list_models(self) -> list[str]:
         if self._llm_provider == "lm_studio":

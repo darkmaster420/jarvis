@@ -33,6 +33,7 @@ public:
     void enrollStart(const std::string& name, bool refine = false);
     void enrollCancel();
     void requestSettings();
+    void requestUserSkills();
     void requestPatches();
     void approvePatch(const std::string& id);
     void rejectPatch(const std::string& id);

@@ -625,7 +625,10 @@ void Hud::run() {
         bool f2 = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
         if (f2 && !f2_down_) {
             show_settings_ = !show_settings_;
-            if (show_settings_) ws_.requestSettings();
+            if (show_settings_) {
+                ws_.requestSettings();
+                ws_.requestUserSkills();
+            }
         }
         f2_down_ = f2;
 
@@ -1106,6 +1109,7 @@ void Hud::drawSettings() {
     float speaker_threshold = 0.75f;
     std::string owner;
     std::vector<std::string> models, voices, providers, profiles;
+    std::vector<SharedState::UserSkillItem> user_skills;
     std::vector<SharedState::ElevenVoice> eleven_voices;
     int  enroll_n = 8;
     bool ollama_ready = false;
@@ -1129,6 +1133,7 @@ void Hud::drawSettings() {
         providers           = state_.available_tts_providers;
         eleven_voices       = state_.available_elevenlabs_voices;
         profiles            = state_.available_profiles;
+        user_skills         = state_.available_user_skills;
     }
     if (providers.empty()) providers = {"auto", "elevenlabs", "piper"};
 
@@ -1154,6 +1159,8 @@ void Hud::drawSettings() {
     if (ImGui::Button("Close##set")) show_settings_ = false;
     ImGui::SameLine();
     if (ImGui::Button("Refresh##set")) ws_.requestSettings();
+    ImGui::SameLine();
+    if (ImGui::Button("Skills##set")) ws_.requestUserSkills();
     ImGui::Unindent(10);
 
     ImGui::SeparatorText("SECTIONS");
@@ -1352,6 +1359,32 @@ void Hud::drawSettings() {
                 ImGui::EndDisabled();
             }
             ImGui::TextDisabled("%d lines / session", enroll_n);
+        }
+    }
+
+    if (ImGui::CollapsingHeader("> Custom Skills", ImGuiTreeNodeFlags_Framed)) {
+        ImGui::TextDisabled("Loaded user-defined tools");
+        if (ImGui::Button("Refresh##skills")) {
+            ws_.requestUserSkills();
+        }
+        if (user_skills.empty()) {
+            ImGui::TextDisabled("— none yet");
+        } else {
+            for (const auto& s : user_skills) {
+                ImGui::PushID(s.name.c_str());
+                ImGui::BulletText("%s", s.name.c_str());
+                if (!s.source.empty()) {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("[%s]", s.source.c_str());
+                }
+                if (!s.description.empty()) {
+                    ImGui::PushTextWrapPos((float)kWinW - 28);
+                    ImGui::TextColored(ImVec4(0.75f, 0.82f, 0.90f, 0.85f),
+                                       "%s", s.description.c_str());
+                    ImGui::PopTextWrapPos();
+                }
+                ImGui::PopID();
+            }
         }
     }
 
