@@ -71,6 +71,7 @@ private:
     std::string selected_patch_id_;
     char   eleven_key_buf_[256] = {0};
     char   enroll_name_buf_[64] = {0};
+    char   prompt_buf_[768] = {0};
     std::string log_path_;
     std::string layout_path_;
     std::string log_buffer_;

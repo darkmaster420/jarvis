@@ -130,6 +130,15 @@ void WsClient::sendRaw(const std::string& payload) {
     (void)info;
 }
 
+void WsClient::sendPrompt(const std::string& text) {
+    json j = {
+        {"cmd", "prompt"},
+        {"user", "guest"},
+        {"text", text},
+    };
+    sendRaw(j.dump());
+}
+
 void WsClient::setLlmModel(const std::string& model) {
     json j = {{"cmd", "set_llm_model"}, {"model", model}};
     sendRaw(j.dump());

@@ -1,5 +1,5 @@
 #define MyAppName "Jarvis"
-#define MyAppVersion "0.2.12"
+#define MyAppVersion "0.2.13"
 #define MyAppPublisher "Jarvis"
 #define MyAppExeName "Jarvis.exe"
 
@@ -9,7 +9,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 ; Installer EXE and ARP (Apps & features) use this 4-part version
-VersionInfoVersion=0.2.12.0
+VersionInfoVersion=0.2.13.0
 DefaultDirName={autopf}\Jarvis
 DefaultGroupName=Jarvis
 DisableProgramGroupPage=yes
@@ -24,7 +24,7 @@ PrivilegesRequired=admin
 SetupLogging=yes
 VersionInfoDescription={#MyAppName} Windows installer
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion=0.2.12.0
+VersionInfoProductVersion=0.2.13.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

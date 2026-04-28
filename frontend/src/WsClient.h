@@ -19,6 +19,7 @@ public:
 
     void sendCommand(const std::string& cmd);
     void sendRaw(const std::string& json);
+    void sendPrompt(const std::string& text);
     void setLlmModel(const std::string& model);
     void setVoice(const std::string& voice);
     void setTtsProvider(const std::string& provider);

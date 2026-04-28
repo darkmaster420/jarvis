@@ -1013,41 +1013,69 @@ void Hud::drawTextPanel() {
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 7));
-    ImGui::Dummy(ImVec2(0, 2));
+    const float input_h = 48.0f;
+    if (ImGui::BeginChild("##panel_body", ImVec2(0, panel_h - input_h), false)) {
+        ImGui::Dummy(ImVec2(0, 2));
 
-    ImGui::Indent(12);
-    ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.95f, 1.0f), "JARVIS");
-    ImGui::SameLine(ImGui::GetWindowWidth() - 80);
-    ImGui::TextColored(ImVec4(0.55f, 0.85f, 0.95f, 0.65f), ":: %s", toString(st));
-    ImGui::Unindent(12);
+        ImGui::Indent(12);
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.95f, 1.0f), "JARVIS");
+        ImGui::SameLine(ImGui::GetWindowWidth() - 80);
+        ImGui::TextColored(ImVec4(0.55f, 0.85f, 0.95f, 0.65f), ":: %s", toString(st));
+        ImGui::Unindent(12);
 
-    ImGui::Dummy(ImVec2(0, 2));
-    ImGui::Indent(12);
+        ImGui::Dummy(ImVec2(0, 2));
+        ImGui::Indent(12);
 
-    if (!transcript.empty()) {
-        ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 0.75f), "%s ::",
-                           user.empty() ? "usr" : user.c_str());
-        std::string display = transcript_show;
-        if (typing) {
-            display += '_';
+        if (!transcript.empty()) {
+            ImGui::TextColored(ImVec4(0.45f, 0.75f, 1.0f, 0.75f), "%s ::",
+                               user.empty() ? "usr" : user.c_str());
+            std::string display = transcript_show;
+            if (typing) {
+                display += '_';
+            }
+            ImGui::PushTextWrapPos(kWinW - 24);
+            ImGui::TextColored(ImVec4(0.92f, 0.94f, 0.98f, 0.92f), "%s", display.c_str());
+            ImGui::PopTextWrapPos();
         }
-        ImGui::PushTextWrapPos(kWinW - 24);
-        ImGui::TextColored(ImVec4(0.92f, 0.94f, 0.98f, 0.92f), "%s", display.c_str());
-        ImGui::PopTextWrapPos();
+        if (!reply.empty()) {
+            ImGui::Dummy(ImVec2(0, 6));
+            ImGui::TextColored(ImVec4(0.2f, 0.95f, 0.75f, 0.85f), "OUT ::");
+            ImGui::PushTextWrapPos(kWinW - 24);
+            ImGui::TextColored(ImVec4(0.75f, 0.98f, 0.88f, 0.9f), "%s", reply.c_str());
+            ImGui::PopTextWrapPos();
+        }
+        if (!status.empty()) {
+            ImGui::Dummy(ImVec2(0, 4));
+            ImGui::TextColored(ImVec4(0.5f, 0.65f, 0.78f, 0.55f), "%s", status.c_str());
+        }
+        ImGui::Unindent(12);
     }
-    if (!reply.empty()) {
-        ImGui::Dummy(ImVec2(0, 6));
-        ImGui::TextColored(ImVec4(0.2f, 0.95f, 0.75f, 0.85f), "OUT ::");
-        ImGui::PushTextWrapPos(kWinW - 24);
-        ImGui::TextColored(ImVec4(0.75f, 0.98f, 0.88f, 0.9f), "%s", reply.c_str());
-        ImGui::PopTextWrapPos();
-    }
-    if (!status.empty()) {
-        ImGui::Dummy(ImVec2(0, 4));
-        ImGui::TextColored(ImVec4(0.5f, 0.65f, 0.78f, 0.55f), "%s", status.c_str());
-    }
-    ImGui::Unindent(12);
+    ImGui::EndChild();
 
+    ImGui::Separator();
+    ImGui::Indent(8);
+    ImGui::SetNextItemWidth((float)kWinW - 110.0f);
+    bool submit = ImGui::InputTextWithHint(
+        "##prompt_input",
+        "Type to Jarvis as guest...",
+        prompt_buf_,
+        sizeof(prompt_buf_),
+        ImGuiInputTextFlags_EnterReturnsTrue
+    );
+    ImGui::SameLine();
+    if (ImGui::Button("Send##prompt")) {
+        submit = true;
+    }
+    ImGui::Unindent(8);
+    if (submit) {
+        std::string text(prompt_buf_);
+        auto l = text.find_first_not_of(" \t\r\n");
+        auto r = text.find_last_not_of(" \t\r\n");
+        if (l != std::string::npos && r != std::string::npos) {
+            ws_.sendPrompt(text.substr(l, r - l + 1));
+            prompt_buf_[0] = '\0';
+        }
+    }
     ImGui::PopStyleVar();
     ImGui::EndChild();
     ImGui::PopStyleVar(2);  // child rounding + child padding

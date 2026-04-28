@@ -262,6 +262,10 @@ class JarvisServer:
             text = (msg.get("text") or "").strip()
             if text:
                 await self._speak(text)
+        elif cmd == "prompt":
+            text = (msg.get("text") or "").strip()
+            if text:
+                await self._process_text_prompt(text, user="guest")
         elif cmd == "list_settings":
             await self.broadcast("settings", **self._settings_snapshot())
         elif cmd == "set_llm_model":
@@ -499,6 +503,35 @@ class JarvisServer:
             await self.broadcast("patches", items=patches)
         if turn_id == self._turn_id:
             await self._speak(clean_reply, turn_id=turn_id)
+
+    async def _process_text_prompt(self, text: str, user: str = "guest") -> None:
+        """Handle typed HUD prompts through the same orchestration path as voice."""
+        text = (text or "").strip()
+        if not text:
+            return
+        self._turn_id += 1
+        turn_id = self._turn_id
+        self.tts.stop()
+        await self._set_state(State.THINKING)
+        await self.broadcast("transcript", text=text, user=user, score=1.0)
+
+        def on_status(msg: str) -> None:
+            def _schedule() -> None:
+                asyncio.create_task(self._think_speak(turn_id, msg))
+
+            self.loop.call_soon_threadsafe(_schedule)
+
+        result = await asyncio.to_thread(self.orch.handle, text, user, on_status)
+        if turn_id != self._turn_id:
+            log.info("discarding text prompt result from interrupted turn")
+            return
+        clean_reply = _clean_for_speech(result.reply)
+        await self.broadcast("reply", text=clean_reply, intent=result.intent,
+                             success=result.success)
+        if result.intent == "propose_patch":
+            patches = await asyncio.to_thread(self.patches.list_patches)
+            await self.broadcast("patches", items=patches)
+        await self._speak(clean_reply, turn_id=turn_id)
 
     def _enroll_continue(self) -> None:
         async def _later() -> None:
