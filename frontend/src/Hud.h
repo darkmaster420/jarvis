@@ -2,6 +2,7 @@
 
 #include "State.h"
 
+#include <functional>
 #include <string>
 #include <windows.h>
 
@@ -16,7 +17,8 @@ class WsClient;
 
 class Hud {
 public:
-    Hud(SharedState& state, WsClient& ws, std::string log_path = {});
+    Hud(SharedState& state, WsClient& ws, std::string log_path = {},
+        std::function<std::string()> restart_backend = {});
     ~Hud();
 
     bool init();
@@ -47,6 +49,7 @@ private:
 
     SharedState& state_;
     WsClient&    ws_;
+    std::function<std::string()> restart_backend_;
 
     HWND  hwnd_  = nullptr;
     HINSTANCE hinst_ = nullptr;

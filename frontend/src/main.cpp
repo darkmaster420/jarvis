@@ -74,7 +74,15 @@ static int run_app(int argc, char** argv) {
 
     jarvis::SharedState state;
     jarvis::WsClient    ws(state, url);
-    jarvis::Hud         hud(state, ws, backend.logPath());
+    auto restart_backend = [&backend, dev_hud, reload_interval_s]() -> std::string {
+        backend.stop();
+        std::string info;
+        if (backend.start(info, dev_hud, reload_interval_s)) {
+            return "Backend restarted. " + info;
+        }
+        return "Backend restart failed: " + info;
+    };
+    jarvis::Hud         hud(state, ws, backend.logPath(), restart_backend);
 
     int rc = 0;
     if (!hud.init()) {

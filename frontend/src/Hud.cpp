@@ -319,8 +319,12 @@ LRESULT CALLBACK WndProcThunk(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 } // namespace
 
-Hud::Hud(SharedState& state, WsClient& ws, std::string log_path)
-    : state_(state), ws_(ws), log_path_(std::move(log_path)) {}
+Hud::Hud(SharedState& state, WsClient& ws, std::string log_path,
+         std::function<std::string()> restart_backend)
+    : state_(state),
+      ws_(ws),
+      restart_backend_(std::move(restart_backend)),
+      log_path_(std::move(log_path)) {}
 Hud::~Hud() { shutdown(); }
 
 LRESULT Hud::handleMessage(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -1057,7 +1061,7 @@ void Hud::drawTextPanel() {
     ImGui::SetNextItemWidth((float)kWinW - 110.0f);
     bool submit = ImGui::InputTextWithHint(
         "##prompt_input",
-        "Type to Jarvis as guest...",
+        "Type as guest... (/restart to restart backend)",
         prompt_buf_,
         sizeof(prompt_buf_),
         ImGuiInputTextFlags_EnterReturnsTrue
@@ -1072,7 +1076,18 @@ void Hud::drawTextPanel() {
         auto l = text.find_first_not_of(" \t\r\n");
         auto r = text.find_last_not_of(" \t\r\n");
         if (l != std::string::npos && r != std::string::npos) {
-            ws_.sendPrompt(text.substr(l, r - l + 1));
+            text = text.substr(l, r - l + 1);
+            if (text == "/restart") {
+                state_.setStatus("Restarting backend...");
+                if (restart_backend_) {
+                    std::string msg = restart_backend_();
+                    state_.setStatus(msg.empty() ? "Backend restart requested." : msg);
+                } else {
+                    state_.setStatus("Backend launcher unavailable.");
+                }
+            } else {
+                ws_.sendPrompt(text);
+            }
             prompt_buf_[0] = '\0';
         }
     }
