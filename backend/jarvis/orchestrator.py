@@ -1823,8 +1823,11 @@ class Orchestrator:
                 log.debug("user skill reload before auto-route failed: %s", e)
         if not self._user_skills:
             return None
+
         norm_text = _norm(text)
         wants_storage = bool(re.search(r"\b(storage|disk|drive|space)\b", norm_text))
+
+        # Explicit ask always wins (e.g. "use check storage skill").
         m_exp = _EXPLICIT_SKILL_PAT.search(text or "")
         if m_exp:
             raw_name = (m_exp.group("name") or "").lower().strip()
@@ -1832,6 +1835,17 @@ class Orchestrator:
             if n in self._user_skills:
                 log.info("auto-routing explicit skill mention to %s", n)
                 return self._run_tool(n, {}, user)
+
+        # Deterministic storage preference.
+        if wants_storage:
+            name_hits = sorted([
+                n for n in self._user_skills.keys()
+                if any(k in n for k in ("storage", "disk", "drive", "space"))
+            ])
+            if len(name_hits) == 1:
+                log.info("auto-routing storage request to user skill %s", name_hits[0])
+                return self._run_tool(name_hits[0], {}, user)
+
         words = {
             _norm_word(w) for w in _tokenize_words(text)
             if len(w) >= 3 and w not in _ROUTE_STOPWORDS
@@ -1856,6 +1870,7 @@ class Orchestrator:
                 continue
             params = fn.get("parameters") or {}
             req = params.get("required") or []
+            # Keep this: auto-routing missing required args causes bad calls.
             if req:
                 continue
             desc = str(fn.get("description") or "")
@@ -1868,11 +1883,9 @@ class Orchestrator:
                 continue
             overlap = words & skill_words
             score = len(overlap)
-            # Strong boost when the skill name itself appears in user text.
-            if name.lower().replace("_", " ") in _norm(text):
+            if name.lower().replace("_", " ") in norm_text:
                 score += 3
             if wants_storage and ({"storage", "disk", "drive", "space"} & skill_words):
-                # Prefer storage-focused custom skills over generic resource tools.
                 s_score = score + 4
                 if s_score > best_storage_score:
                     best_storage_name = name
@@ -1888,7 +1901,6 @@ class Orchestrator:
                 best_storage_score,
             )
             return self._run_tool(best_storage_name, {}, user)
-        # Require meaningful overlap to avoid false positives.
         if not best_name or best_score < 2:
             return None
         log.info("auto-routing request to user skill %s (score=%s)", best_name, best_score)
