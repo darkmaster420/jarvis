@@ -31,6 +31,8 @@ class ToolDispatcher:
         self._handle_text = handle_text
 
     def run_tool(self, name: str, args: dict, user: str) -> SkillResult:
+        # Some models call handler symbols (e.g. handle_check_storage) instead
+        # of the exposed tool name (check_storage). Normalize when possible.
         if (
             isinstance(name, str)
             and name.startswith("handle_")

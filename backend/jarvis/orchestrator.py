@@ -793,6 +793,19 @@ def _tokenize_words(text: str) -> list[str]:
     return [w for w in re.findall(r"[a-z0-9_]+", (text or "").lower()) if w]
 
 
+def _norm_word(w: str) -> str:
+    w = (w or "").lower().strip("_")
+    if len(w) > 4 and w.endswith("s"):
+        w = w[:-1]
+    return w
+
+
+_EXPLICIT_SKILL_PAT = re.compile(
+    r"\b(?:use|run|call|try|execute)\s+(?:the\s+)?(?P<name>[a-z][a-z0-9_ ]{2,63})\s+skill\b",
+    re.I,
+)
+
+
 def _openai_choice_message(resp: dict) -> dict | None:
     ch = (resp.get("choices") or [])
     if not ch or not isinstance(ch[0], dict):
@@ -1377,6 +1390,14 @@ class Orchestrator:
         if m_url and not self._authorised("open_url", user):
             log.info("denied intent=open_url (raw url) for user=%s", user)
             return RESTRICTED_DENIED
+        # Prefer a strong custom-skill match before built-in regex rules so
+        # user-authored capabilities (e.g. storage checks) are not shadowed by
+        # generic built-ins.
+        auto_skill = self._auto_route_user_skill(text, user)
+        if auto_skill is not None:
+            self._history.append(("user", text))
+            self._history.append(("assistant", auto_skill.reply))
+            return auto_skill
         norm = _norm(text)
         for pat, fn, intent in self._rules:
             m = pat.search(norm)
@@ -1393,11 +1414,6 @@ class Orchestrator:
                     log.exception("skill '%s' failed", intent)
                     return SkillResult(f"That skill crashed: {e}",
                                        intent=intent, success=False)
-        auto_skill = self._auto_route_user_skill(text, user)
-        if auto_skill is not None:
-            self._history.append(("user", text))
-            self._history.append(("assistant", auto_skill.reply))
-            return auto_skill
         if _wants_desktop_vision(text):
             if not self._authorised("desktop", user):
                 log.info("denied intent=desktop for user=%s", user)
@@ -1797,17 +1813,42 @@ class Orchestrator:
         - a user skill has no required params
         - lexical overlap between request and skill name/description is high
         """
-        if not self._user_skills or _wants_user_skill(text):
+        if _wants_user_skill(text):
             return None
+        # Runtime registry can be empty after backend code reloads; refresh once.
+        if not self._user_skills and self.user_skills_mgr is not None:
+            try:
+                self.user_skills_mgr.reload_all()
+            except Exception as e:
+                log.debug("user skill reload before auto-route failed: %s", e)
+        if not self._user_skills:
+            return None
+        norm_text = _norm(text)
+        wants_storage = bool(re.search(r"\b(storage|disk|drive|space)\b", norm_text))
+        m_exp = _EXPLICIT_SKILL_PAT.search(text or "")
+        if m_exp:
+            raw_name = (m_exp.group("name") or "").lower().strip()
+            n = re.sub(r"\s+", "_", raw_name)
+            if n in self._user_skills:
+                log.info("auto-routing explicit skill mention to %s", n)
+                return self._run_tool(n, {}, user)
         words = {
-            w for w in _tokenize_words(text)
+            _norm_word(w) for w in _tokenize_words(text)
             if len(w) >= 3 and w not in _ROUTE_STOPWORDS
         }
+        # "check_storage" style mention should overlap with "check storage".
+        expanded_words = set(words)
+        for w in list(words):
+            if "_" in w:
+                expanded_words.update(_norm_word(p) for p in w.split("_") if p)
+        words = expanded_words
         if not words:
             return None
 
         best_name = ""
         best_score = 0
+        best_storage_name = ""
+        best_storage_score = 0
         for spec in self._user_tool_specs:
             fn = spec.get("function", {})
             name = str(fn.get("name") or "").strip()
@@ -1819,7 +1860,8 @@ class Orchestrator:
                 continue
             desc = str(fn.get("description") or "")
             skill_words = {
-                w for w in _tokenize_words(name.replace("_", " ") + " " + desc)
+                _norm_word(w)
+                for w in _tokenize_words(name.replace("_", " ") + " " + desc)
                 if len(w) >= 3 and w not in _ROUTE_STOPWORDS
             }
             if not skill_words:
@@ -1829,10 +1871,23 @@ class Orchestrator:
             # Strong boost when the skill name itself appears in user text.
             if name.lower().replace("_", " ") in _norm(text):
                 score += 3
+            if wants_storage and ({"storage", "disk", "drive", "space"} & skill_words):
+                # Prefer storage-focused custom skills over generic resource tools.
+                s_score = score + 4
+                if s_score > best_storage_score:
+                    best_storage_name = name
+                    best_storage_score = s_score
             if score > best_score:
                 best_name = name
                 best_score = score
 
+        if wants_storage and best_storage_name:
+            log.info(
+                "auto-routing storage request to user skill %s (score=%s)",
+                best_storage_name,
+                best_storage_score,
+            )
+            return self._run_tool(best_storage_name, {}, user)
         # Require meaningful overlap to avoid false positives.
         if not best_name or best_score < 2:
             return None
