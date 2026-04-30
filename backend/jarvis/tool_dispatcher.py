@@ -42,6 +42,7 @@ class ToolDispatcher:
         intent = {
             "open_app":   "open_app",
             "close_app":  "close_app",
+            "start_mongodb_container": "start_mongodb_container",
             "close_browser_tab": "close_browser_tab",
             "reopen_closed_browser_tab": "reopen_closed_browser_tab",
             "web_search": "web_search",
@@ -61,6 +62,8 @@ class ToolDispatcher:
         if name == "close_app":
             target = (args.get("name") or args.get("app") or "").strip()
             return system.close_app(target)
+        if name == "start_mongodb_container":
+            return system.start_mongodb_container()
         if name == "web_search":
             query = (args.get("query") or args.get("q") or "").strip()
             return web.search(query)
@@ -180,7 +183,8 @@ class ToolDispatcher:
                     new_content=args.get("new_content") or "",
                 )
             except Exception as e:
-                return SkillResult(f"Patch rejected: {e}",
+                return SkillResult(
+                    f"Patch rejected before HUD review: {e}",
                                    intent="propose_patch", success=False)
             msg = (
                 f"I've proposed a patch to {rec['target']} — please approve it "

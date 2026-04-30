@@ -46,8 +46,8 @@ namespace fs = std::filesystem;
 
 // Wider/taller than v0.2.x so settings rows (combos + Save/Go) are not squeezed.
 constexpr int   kWinW      = 420;
-constexpr int   kWinH      = 520;
-constexpr int   kTextPanelY = 228;  // y offset for log area under orb
+constexpr int   kWinH      = 600;
+constexpr int   kTextPanelY = 244;  // y offset for log area under orb
 constexpr float kOrbRadius = 72.0f;
 constexpr float kPi        = 3.14159265358979323846f;
 constexpr int   kBorderDragPx = 10;  // drag by grabbing the window edge (not ImGui)
@@ -204,6 +204,33 @@ static std::string utf8_prefix_cp(const std::string& s, size_t n_cp) {
         i += w; ++n;
     }
     return s.substr(0, i);
+}
+
+static std::string humanizeLogLine(const std::string& line) {
+    if (line.empty()) return line;
+    // Piper debug output can dump huge phoneme arrays that bury useful info.
+    if (line.find("DEBUG piper.voice:") != std::string::npos) {
+        size_t p = line.find(", phonemes=");
+        if (p != std::string::npos) {
+            return line.substr(0, p) + " [phonemes hidden]";
+        }
+    }
+    // Websocket frame dumps are noisy; keep only event names when possible.
+    if (line.find("DEBUG websockets.server: > TEXT ") != std::string::npos ||
+        line.find("DEBUG websockets.server: < TEXT ") != std::string::npos) {
+        size_t e0 = line.find("\"event\": \"");
+        if (e0 != std::string::npos) {
+            e0 += 10;  // strlen("\"event\": \"")
+            size_t e1 = line.find('"', e0);
+            if (e1 != std::string::npos && e1 > e0) {
+                std::string ev = line.substr(e0, e1 - e0);
+                bool outbound = line.find("> TEXT ") != std::string::npos;
+                return std::string("DEBUG websockets.server: ")
+                    + (outbound ? "sent event=" : "recv event=") + ev;
+            }
+        }
+    }
+    return line;
 }
 
 /** Corner brackets, tick marks, horizontal scan line — under widgets. */
@@ -434,7 +461,11 @@ bool Hud::init() {
     DWORD exStyle = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
 
     hwnd_ = CreateWindowExW(
+#ifdef JARVIS_DEBUG_HUD
+        exStyle, kClassName, L"Jarvis (Debug)", style,
+#else
         exStyle, kClassName, L"Jarvis", style,
+#endif
         posX, posY, kWinW, kWinH,
         nullptr, nullptr, hinst_, this);
     if (!hwnd_) {
@@ -1143,8 +1174,7 @@ void Hud::drawSettings() {
                            | ImGuiWindowFlags_NoResize
                            | ImGuiWindowFlags_NoMove
                            | ImGuiWindowFlags_NoCollapse
-                           | ImGuiWindowFlags_NoSavedSettings
-                           | ImGuiWindowFlags_AlwaysVerticalScrollbar;
+                           | ImGuiWindowFlags_NoSavedSettings;
     ImGui::PushStyleColor(ImGuiCol_WindowBg, kOverlayWindowBg);
     if (!ImGui::Begin("##jarvis_settings", nullptr, flags)) {
         ImGui::End();
@@ -1155,7 +1185,7 @@ void Hud::drawSettings() {
     ImGui::Dummy(ImVec2(0, 4));
     ImGui::Indent(10);
     ImGui::TextColored(ImVec4(0.35f, 1.0f, 0.92f, 1.0f), "CONFIG // SYS");
-    ImGui::SameLine(ImGui::GetWindowWidth() - 198);
+    ImGui::SameLine();
     if (ImGui::Button("Close##set")) show_settings_ = false;
     ImGui::SameLine();
     if (ImGui::Button("Refresh##set")) ws_.requestSettings();
@@ -1168,6 +1198,9 @@ void Hud::drawSettings() {
 
     if (ImGui::CollapsingHeader("> LLM / Ollama",
             ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed)) {
+        auto fullWidth = []() -> float {
+            return std::max(140.0f, ImGui::GetContentRegionAvail().x);
+        };
         if (!ollama_ready) {
             ImGui::TextDisabled("Preparing (pull may take a while)...");
         } else if (models.empty()) {
@@ -1175,7 +1208,7 @@ void Hud::drawSettings() {
         } else {
             ImGui::TextColored(ImVec4(0.35f, 0.9f, 0.55f, 0.9f), "OK — %d tag(s).", (int)models.size());
         }
-        ImGui::SetNextItemWidth((float)kWinW - 28);
+        ImGui::SetNextItemWidth(fullWidth());
         if (!ollama_ready) {
             ImGui::BeginDisabled();
         }
@@ -1207,9 +1240,12 @@ void Hud::drawSettings() {
     }
 
     if (ImGui::CollapsingHeader("> TTS", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed)) {
+        auto fullWidth = []() -> float {
+            return std::max(140.0f, ImGui::GetContentRegionAvail().x);
+        };
         ImGui::TextDisabled("active: %s",
             tts_active_provider.empty() ? "?" : tts_active_provider.c_str());
-        ImGui::SetNextItemWidth((float)kWinW - 28);
+        ImGui::SetNextItemWidth(fullWidth());
         if (ImGui::BeginCombo("##ttsprov",
                               tts_provider.empty() ? "auto" : tts_provider.c_str())) {
             for (const auto& p : providers) {
@@ -1222,7 +1258,7 @@ void Hud::drawSettings() {
             ImGui::EndCombo();
         }
         ImGui::Text("ElevenLabs key");
-        ImGui::SetNextItemWidth((float)kWinW - 124);
+        ImGui::SetNextItemWidth(std::max(120.0f, fullWidth() - 120.0f));
         ImGui::InputTextWithHint("##elevenkey", "sk-...", eleven_key_buf_, sizeof(eleven_key_buf_),
                                  ImGuiInputTextFlags_Password);
         ImGui::SameLine();
@@ -1237,7 +1273,7 @@ void Hud::drawSettings() {
         if (eleven_has_key && !eleven_key_hint.empty()) {
             ImGui::TextDisabled("saved: %s", eleven_key_hint.c_str());
         }
-        ImGui::SetNextItemWidth((float)kWinW - 100);
+        ImGui::SetNextItemWidth(std::max(120.0f, fullWidth() - 80.0f));
         {
             std::string label = eleven_voice_name.empty() ? eleven_voice_id : eleven_voice_name;
             if (label.empty()) {
@@ -1262,7 +1298,7 @@ void Hud::drawSettings() {
         if (ImGui::Button("Go##ev")) {
             ws_.refreshElevenlabsVoices();
         }
-        ImGui::SetNextItemWidth((float)kWinW - 28);
+        ImGui::SetNextItemWidth(fullWidth());
         if (ImGui::BeginCombo("##voice", current_voice.empty() ? "Piper" : current_voice.c_str())) {
             if (voices.empty()) {
                 ImGui::TextDisabled("No piper/ voices.");
@@ -1279,6 +1315,9 @@ void Hud::drawSettings() {
     }
 
     if (ImGui::CollapsingHeader("> Speaker", ImGuiTreeNodeFlags_Framed)) {
+        auto fullWidth = []() -> float {
+            return std::max(140.0f, ImGui::GetContentRegionAvail().x);
+        };
         {
             bool enabled = speaker_enabled;
             if (ImGui::Checkbox("ID speaker", &enabled)) {
@@ -1286,7 +1325,7 @@ void Hud::drawSettings() {
             }
         }
         ImGui::TextDisabled("lower = looser match, higher = stricter");
-        ImGui::SetNextItemWidth((float)kWinW - 28);
+        ImGui::SetNextItemWidth(fullWidth());
         {
             float thr = speaker_threshold;
             ImGui::SliderFloat("##spkthr", &thr, 0.50f, 0.95f, "match %.2f",
@@ -1295,7 +1334,7 @@ void Hud::drawSettings() {
                 ws_.setSpeakerThreshold(thr);
             }
         }
-        ImGui::SetNextItemWidth((float)kWinW - 28);
+        ImGui::SetNextItemWidth(fullWidth());
         {
             std::string olabel = owner.empty() ? "owner" : owner;
             if (ImGui::BeginCombo("##owner", olabel.c_str())) {
@@ -1318,7 +1357,7 @@ void Hud::drawSettings() {
             for (const auto& p : profiles) {
                 ImGui::PushID(p.c_str());
                 ImGui::BulletText("%s%s", p.c_str(), (p == owner) ? " *" : "");
-                ImGui::SameLine((float)kWinW - 120);
+                ImGui::SameLine();
                 if (ImGui::Button("More")) {
                     ws_.enrollStart(p, true);
                 }
@@ -1344,7 +1383,7 @@ void Hud::drawSettings() {
                 ws_.enrollCancel();
             }
         } else {
-            ImGui::SetNextItemWidth((float)kWinW - 100);
+            ImGui::SetNextItemWidth(std::max(120.0f, fullWidth() - 70.0f));
             ImGui::InputTextWithHint("##enrollname", "name", enroll_name_buf_, sizeof(enroll_name_buf_));
             ImGui::SameLine();
             bool can_start = enroll_name_buf_[0] != '\0';
@@ -1378,7 +1417,9 @@ void Hud::drawSettings() {
                     ImGui::TextDisabled("[%s]", s.source.c_str());
                 }
                 if (!s.description.empty()) {
-                    ImGui::PushTextWrapPos((float)kWinW - 28);
+                    ImGui::PushTextWrapPos(
+                        ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
+                    );
                     ImGui::TextColored(ImVec4(0.75f, 0.82f, 0.90f, 0.85f),
                                        "%s", s.description.c_str());
                     ImGui::PopTextWrapPos();
@@ -1568,8 +1609,7 @@ void Hud::drawLogs() {
     ImGui::Dummy(ImVec2(0, 2));
     ImGui::Separator();
 
-    ImGui::BeginChild("##logbody", ImVec2(0, 0), false,
-                      ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::BeginChild("##logbody", ImVec2(0, 0), false);
     ImGui::PushFont(ImGui::GetFont());
     // Render line-by-line so long logs don't blow past ImGui's per-call
     // text limit, and so we can colour-code warnings/errors.
@@ -1577,8 +1617,9 @@ void Hud::drawLogs() {
     size_t i = 0;
     while (i < d.size()) {
         size_t j = d.find('\n', i);
-        std::string line = d.substr(
+        std::string raw_line = d.substr(
             i, j == std::string::npos ? std::string::npos : j - i);
+        std::string line = humanizeLogLine(raw_line);
         ImVec4 col(0.85f, 0.85f, 0.90f, 1.0f);
         // Cheap severity heuristics - matches the default logging format.
         if (line.find("ERROR")   != std::string::npos ||
@@ -1591,7 +1632,11 @@ void Hud::drawLogs() {
         } else if (line.find("INFO") != std::string::npos) {
             col = ImVec4(0.75f, 0.85f, 1.0f, 1.0f);
         }
+        ImGui::PushTextWrapPos(
+            ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x
+        );
         ImGui::TextColored(col, "%s", line.c_str());
+        ImGui::PopTextWrapPos();
         if (j == std::string::npos) break;
         i = j + 1;
     }
@@ -1609,10 +1654,11 @@ void Hud::drawVersionCorner() {
     std::snprintf(label, sizeof(label), "v%s", JARVIS_HUD_VERSION_STR);
     const ImVec2 ts = ImGui::CalcTextSize(label);
     const float   pad = 7.0f;
+    const float   lift = 38.0f;  // keep clear of prompt row in main HUD view
     const ImVec2  wp  = ImGui::GetWindowPos();
     const ImVec2  ws  = ImGui::GetWindowSize();
     const ImVec2  p(
-        wp.x + ws.x - ts.x - pad, wp.y + ws.y - ts.y - pad);
+        wp.x + ws.x - ts.x - pad, wp.y + ws.y - ts.y - pad - lift);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     // Subtle shadow then text (futuristic HUD readout)
     dl->AddText(

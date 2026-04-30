@@ -2,11 +2,31 @@
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any
 
 import requests
 
 log = logging.getLogger(__name__)
+
+
+class RequestCancelled(RuntimeError):
+    """Raised when an in-flight OpenAI-compatible request is cancelled."""
+
+
+_ACTIVE_RESPONSES_LOCK = threading.Lock()
+_ACTIVE_RESPONSES: set[requests.Response] = set()
+
+
+def cancel_active_requests() -> None:
+    """Best-effort abort for in-flight HTTP responses."""
+    with _ACTIVE_RESPONSES_LOCK:
+        active = list(_ACTIVE_RESPONSES)
+    for resp in active:
+        try:
+            resp.close()
+        except Exception:
+            pass
 
 
 def chat_completions(
@@ -20,6 +40,7 @@ def chat_completions(
     temperature: float = 0.3,
     max_tokens: int | None = None,
     timeout_s: int = 600,
+    cancel_event: threading.Event | None = None,
 ) -> dict[str, Any]:
     """POST ``/v1/chat/completions``. Returns the parsed JSON object."""
     url = base_url.rstrip("/") + "/chat/completions"
@@ -40,14 +61,26 @@ def chat_completions(
         body["tools"] = tools
         if tool_choice:
             body["tool_choice"] = tool_choice
+    if cancel_event is not None and cancel_event.is_set():
+        raise RequestCancelled("request cancelled before send")
     r = requests.post(url, json=body, headers=headers, timeout=timeout_s)
-    if r.status_code >= 400:
-        log.debug("chat/completions %s: %s", r.status_code, (r.text or "")[:2000])
-    r.raise_for_status()
-    data = r.json()
-    if not isinstance(data, dict):
-        raise ValueError("chat/completions: expected a JSON object response")
-    return data
+    with _ACTIVE_RESPONSES_LOCK:
+        _ACTIVE_RESPONSES.add(r)
+    try:
+        if cancel_event is not None and cancel_event.is_set():
+            raise RequestCancelled("request cancelled after send")
+        if r.status_code >= 400:
+            log.debug("chat/completions %s: %s", r.status_code, (r.text or "")[:2000])
+        r.raise_for_status()
+        if cancel_event is not None and cancel_event.is_set():
+            raise RequestCancelled("request cancelled before parse")
+        data = r.json()
+        if not isinstance(data, dict):
+            raise ValueError("chat/completions: expected a JSON object response")
+        return data
+    finally:
+        with _ACTIVE_RESPONSES_LOCK:
+            _ACTIVE_RESPONSES.discard(r)
 
 
 def list_models(

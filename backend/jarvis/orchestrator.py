@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 from collections import deque
 from pathlib import Path
@@ -96,7 +97,17 @@ Big picture:
 - User skills must NOT drive keyboard, mouse, or generic window automation.
   Use built-ins: open_app, close_app, open_url, close_browser_tab, etc.
 
-5) If you cannot fulfill the request safely
+5) Real outputs (no fake telemetry)
+- Do not return fabricated/simulated/live-looking system values (disk, CPU,
+  memory, temperatures, network stats, process lists, file sizes, etc.) unless
+  the user explicitly asks for a mock/demo.
+- If a real value is requested, implement the handler with real runtime reads
+  from allowed libraries (for example ``shutil.disk_usage`` for storage) and
+  label any approximation clearly.
+- If real data cannot be read safely within sandbox limits, return
+  ``success: false`` with a clear explanation instead of inventing numbers.
+
+6) If you cannot fulfill the request safely
 - Say so in plain language; do not emit bundle code that breaks the sandbox.
 """.strip()
 
@@ -128,6 +139,8 @@ def _tool_narration_message(
         return "Looking that up on the web."
     if "run_terminal_command" in names:
         return "Running that command in a local terminal."
+    if "start_mongodb_container" in names:
+        return "Starting MongoDB container now."
     return None
 
 TOOLS_SPEC = [
@@ -297,6 +310,21 @@ TOOLS_SPEC = [
                     },
                 },
                 "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_mongodb_container",
+            "description": (
+                "Start or resume a local MongoDB Docker container on Windows. "
+                "If Docker daemon is down, try launching Docker Desktop and wait "
+                "for readiness, then run/start container 'mongodb' on port 27017."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
             },
         },
     },
@@ -656,7 +684,35 @@ _CREATE_CORE_CAPABILITY_PAT = re.compile(
     r"|"
     r"\b(?:so\s+it\s+can|teach\s+jarvis\s+to|make\s+jarvis\s+able\s+to)\b"
     r".{0,120}\b(?:navigate|automate|email|winget|install|browser|website)\b"
+    r"|"
+    r"\b(?:self-?improve|improve\s+yourself|improve\s+itself)\b"
+    r"|"
+    r"\b(?:when|if)\s+i\s+tell\s+you\s+something\s+you\s+"
+    r"(?:dont|don't|do\s+not)\s+know\s+how\s+to\s+do\b"
+    r"|"
+    r"\b(?:you\s+(?:dont|don't|do\s+not)\s+know\s+how\s+to\s+do)\b"
     r")",
+    re.I,
+)
+
+
+_CORE_REQUIRED_PAT = re.compile(
+    r"\b("
+    r"docker|container|containers?|docker desktop|"
+    r"shell command|terminal command|powershell|cmd\.exe|subprocess|"
+    r"external application|external app|external binary|"
+    r"run system command|execute system command"
+    r")\b",
+    re.I,
+)
+
+
+_DOCKER_ACTION_PAT = re.compile(
+    r"\b(?:start|run|launch|stop|restart|create|remove|delete)\b.{0,80}\b"
+    r"(?:docker|container|containers?|mongo|mongodb)\b"
+    r"|"
+    r"\b(?:docker|container|containers?|mongo|mongodb)\b.{0,80}\b"
+    r"(?:start|run|launch|stop|restart|create|remove|delete)\b",
     re.I,
 )
 
@@ -674,6 +730,14 @@ def _wants_user_skill(text: str) -> bool:
 
 def _wants_core_capability(text: str) -> bool:
     t = text or ""
+    # Core overrides user-skill wording when the request requires external app /
+    # shell orchestration that the user-skills sandbox cannot perform.
+    # For Docker/container lifecycle asks, force core authoring so Jarvis
+    # self-improves by proposing backend patches instead of one-off terminal runs.
+    if _DOCKER_ACTION_PAT.search(t):
+        return True
+    if _CORE_REQUIRED_PAT.search(t) and _wants_user_skill(t):
+        return True
     return bool(_CREATE_CORE_CAPABILITY_PAT.search(t)) and not _wants_user_skill(t)
 
 
@@ -754,11 +818,24 @@ def _skill_authoring_exhausted_reply() -> str:
     )
 
 
-def _core_authoring_prompt_nudge(pname: str, attempt: int) -> str:
+def _core_patch_file_hint(text: str) -> str:
+    t = text or ""
+    if _DOCKER_ACTION_PAT.search(t):
+        return (
+            " For Docker/container lifecycle, prefer patch targets "
+            "backend/jarvis/skills/system.py (behavior) and "
+            "backend/jarvis/tool_dispatcher.py (wiring)."
+        )
+    return ""
+
+
+def _core_authoring_prompt_nudge(pname: str, attempt: int, text: str = "") -> str:
+    hint = _core_patch_file_hint(text)
     msg = (
         "\n\n[CORE EXTENSION — For this request, do not call normal runtime tools. "
         "Return only propose_patch for backend/jarvis/*.py so Jarvis gains a new "
-        f"built-in capability. You used {pname!r}.]"
+        "built-in capability. Target an existing backend file (do not invent "
+        f"paths).{hint} You used {pname!r}.]"
     )
     if attempt >= 2:
         msg += (
@@ -947,6 +1024,14 @@ def _extract_content(resp: Any) -> str:
     return (content or "").strip() if isinstance(content, str) else ""
 
 
+def _log_preview(text: str, limit: int = 700) -> str:
+    """Single-line, bounded preview for model output logs."""
+    t = (text or "").replace("\r", " ").replace("\n", " ").strip()
+    if len(t) <= limit:
+        return t
+    return t[:limit] + " …<truncated>"
+
+
 class Orchestrator:
     def __init__(self, llm_cfg: LlmCfg, perms: PermissionsCfg,
                  memory: Memory | None = None,
@@ -962,6 +1047,7 @@ class Orchestrator:
             system.set_alias_lookup(memory.get_alias)
         self._history: deque[tuple[str, str]] = deque(maxlen=10)
         self._tool_support: dict[str, bool] = {}
+        self._cancel_event = threading.Event()
         self._ollama = None
         prov = (llm_cfg.provider or "ollama").lower().replace("-", "_")
         if prov in ("lmstudio", "openai_compatible"):
@@ -1059,6 +1145,17 @@ class Orchestrator:
                 r")\b"
             ),
              lambda m, u: info_skill.system_stats(), "sys_stats"),
+            # Runtime-first path: if this built-in already exists, execute it
+            # instead of forcing self-improvement authoring for every ask.
+            (re.compile(
+                r"(?i)\b(?:start|run|launch)\s+(?:the\s+)?(?:mongo|mongodb)\s+"
+                r"(?:docker\s+)?container\b"
+            ),
+             lambda m, u: system.start_mongodb_container(), "start_mongodb_container"),
+            (re.compile(
+                r"(?i)\bstart\s+docker\s+(?:mongo|mongodb)\b"
+            ),
+             lambda m, u: system.start_mongodb_container(), "start_mongodb_container"),
 
             (re.compile(r"\b(mute)\b"),
              lambda m, u: system.volume("mute"), "volume"),
@@ -1147,7 +1244,11 @@ class Orchestrator:
         tools: list | None,
         temperature: float,
         max_tokens: int | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Any:
+        if cancel_event is not None and cancel_event.is_set():
+            from .openai_compat import RequestCancelled
+            raise RequestCancelled("request cancelled")
         if self._llm_provider == "ollama":
             opts: dict[str, Any] = {"temperature": temperature}
             if max_tokens is not None:
@@ -1171,7 +1272,18 @@ class Orchestrator:
             tools=tools,
             temperature=temperature,
             max_tokens=mt,
+            cancel_event=cancel_event,
         )
+
+    def cancel_inflight(self) -> None:
+        """Signal cancellation for the active LLM turn."""
+        self._cancel_event.set()
+        if self._llm_provider == "lm_studio":
+            try:
+                from .openai_compat import cancel_active_requests
+                cancel_active_requests()
+            except Exception:
+                log.debug("cancel_active_requests failed", exc_info=True)
 
     def _unload_ollama_model(self, model: str) -> None:
         """Best-effort unload to free RAM/VRAM before switching models."""
@@ -1407,6 +1519,38 @@ class Orchestrator:
                     return RESTRICTED_DENIED
                 try:
                     result = fn(m, user)
+                    if (
+                        not result.success
+                        and _wants_core_capability(text)
+                    ):
+                        log.info(
+                            "runtime core capability failed (%s); escalating to core patch authoring",
+                            intent,
+                        )
+                        if on_status is not None:
+                            try:
+                                on_status("Oops, that did not work. Let me try fixing it.")
+                            except Exception:
+                                log.debug("on_status callback failed", exc_info=True)
+                        repair_prompt = (
+                            text
+                            + "\n\n[Runtime built-in failed. Self-improve now by proposing "
+                            + "a core patch that fixes this exact failure. "
+                            + f"Failure details: {result.reply}]"
+                        )
+                        repaired = self._chat(repair_prompt, user, on_status=on_status)
+                        # If the model still fails to emit a valid patch tool call,
+                        # fall back to the original runtime failure (clearer + actionable)
+                        # instead of surfacing the internal authoring failure string.
+                        if (
+                            isinstance(repaired.reply, str)
+                            and "I should implement that as a built-in backend capability via propose_patch"
+                            in repaired.reply
+                        ):
+                            self._history.append(("user", text))
+                            self._history.append(("assistant", result.reply))
+                            return result
+                        return repaired
                     self._history.append(("user", text))
                     self._history.append(("assistant", result.reply))
                     return result
@@ -1431,7 +1575,7 @@ class Orchestrator:
         return self._prompt_builder.skill_authoring_context()
 
     def _core_authoring_context(self) -> str:
-        return self._prompt_builder.core_authoring_context()
+        return self._prompt_builder.core_authoring_context("")
 
     def _prompt_tool_instructions(self) -> str:
         return self._prompt_builder.prompt_tool_instructions(TOOLS_SPEC)
@@ -1490,6 +1634,8 @@ class Orchestrator:
         user: str,
         on_status: Callable[[str], None] | None = None,
     ) -> SkillResult:
+        # New request scope; clear any previous cancel signal.
+        self._cancel_event.clear()
         if not self._llm_ready():
             return SkillResult(
                 "I don't have a language model available right now.",
@@ -1500,8 +1646,37 @@ class Orchestrator:
         native_supported = self._tool_support.get(model, None)
         skill_boost = _wants_user_skill(text)
         core_boost = _wants_core_capability(text)
+        # If both match, core capability must win. This avoids "create a skill
+        # for Docker ..." being routed into sandbox-limited skill authoring.
+        if core_boost and skill_boost:
+            log.info(
+                "authoring mode override: core_capability wins over user_skill "
+                "for text=%r",
+                text,
+            )
+            skill_boost = False
+        authoring_max_tokens: int | None = None
+        if core_boost:
+            authoring_max_tokens = 2200
+        elif skill_boost:
+            authoring_max_tokens = 1400
         native_attempts = 4 if (skill_boost or core_boost) else 2
         prompt_attempts = 4 if (skill_boost or core_boost) else 2
+
+        # Announce long-running authoring work up-front so the user does not
+        # sit in silence while the model drafts a patch/tool call.
+        if on_status is not None:
+            try:
+                if skill_boost:
+                    on_status(
+                        "Working on a new skill now. I will tell you when the patch is ready."
+                    )
+                elif core_boost:
+                    on_status(
+                        "Working on a built-in update now. I will tell you when the patch is ready."
+                    )
+            except Exception:  # pragma: no cover
+                log.debug("on_status callback failed", exc_info=True)
 
         # Try native tool calling first if we haven't ruled it out.
         all_tools = TOOLS_SPEC + self._user_tool_specs
@@ -1523,8 +1698,21 @@ class Orchestrator:
                         ),
                         tools=native_tools,
                         temperature=0.3,
+                        max_tokens=authoring_max_tokens,
+                        cancel_event=self._cancel_event,
                     )
                 except Exception as e:
+                    try:
+                        from .openai_compat import RequestCancelled
+                        if isinstance(e, RequestCancelled):
+                            log.info("llm request cancelled")
+                            return SkillResult(
+                                "Cancelled.",
+                                intent="chat",
+                                success=False,
+                            )
+                    except Exception:
+                        pass
                     msg = str(e)
                     err_resp = getattr(e, "response", None)
                     if err_resp is not None:
@@ -1555,12 +1743,41 @@ class Orchestrator:
                 tool_calls = _extract_tool_calls(resp)
                 narration = _extract_content(resp)
                 finish_reason = _openai_finish_reason(resp)
+                log.debug(
+                    "llm native response model=%s finish=%s tool_calls=%s content=%r",
+                    model,
+                    finish_reason or "?",
+                    [n for n, _ in tool_calls],
+                    _log_preview(narration),
+                )
                 # Some models (qwen3-coder) emit XML-style tool calls inside
                 # the content instead of via tool_calls. Harvest those too.
                 if "<function=" in narration:
                     tool_calls += _parse_xml_tool_calls(narration)
                     narration = _XML_FN_RE.sub("", narration)
                     narration = re.sub(r"</?tool_call>", "", narration).strip()
+                    log.debug(
+                        "llm native xml-tool parse model=%s tool_calls=%s residual=%r",
+                        model,
+                        [n for n, _ in tool_calls],
+                        _log_preview(narration),
+                    )
+                if core_boost and not tool_calls:
+                    log.warning(
+                        "core authoring: native pass returned no tool call; retry %s/%s",
+                        attempt,
+                        native_attempts - 1,
+                    )
+                    if attempt < native_attempts - 1:
+                        effective_text = (
+                            text
+                            + _core_authoring_prompt_nudge("(no tool in reply)", attempt, text)
+                        )
+                        continue
+                    return self._finalise(
+                        text, [], narration=_core_authoring_exhausted_reply(),
+                        user=user, on_status=on_status,
+                    )
                 if skill_boost and not tool_calls and finish_reason == "length":
                     log.warning(
                         "skill authoring: native pass hit finish_reason=length; retry %s/%s",
@@ -1620,7 +1837,7 @@ class Orchestrator:
                         if attempt < native_attempts - 1:
                             effective_text = (
                                 text
-                                + _core_authoring_prompt_nudge(", ".join(bad), attempt)
+                                + _core_authoring_prompt_nudge(", ".join(bad), attempt, text)
                             )
                             continue
                         return self._finalise(
@@ -1644,9 +1861,17 @@ class Orchestrator:
                     ),
                     tools=None,
                     temperature=0.2,
+                    max_tokens=authoring_max_tokens,
+                    cancel_event=self._cancel_event,
                 )
                 content = _extract_content(resp)
                 parsed = self._parse_prompted_tool(content)
+                log.debug(
+                    "llm prompt response model=%s parsed_tool=%s content=%r",
+                    model,
+                    (parsed[0] if parsed else None),
+                    _log_preview(content),
+                )
                 if parsed is None:
                     if (skill_boost or core_boost) and attempt < prompt_attempts - 1:
                         log.warning(
@@ -1658,10 +1883,20 @@ class Orchestrator:
                         nudge = (
                             _skill_authoring_prompt_nudge("(no tool in reply)", attempt)
                             if skill_boost
-                            else _core_authoring_prompt_nudge("(no tool in reply)", attempt)
+                            else _core_authoring_prompt_nudge("(no tool in reply)", attempt, text)
                         )
                         effective = text + nudge
                         continue
+                    if skill_boost:
+                        return self._finalise(
+                            text, [], narration=_skill_authoring_exhausted_reply(),
+                            user=user, on_status=on_status,
+                        )
+                    if core_boost:
+                        return self._finalise(
+                            text, [], narration=_core_authoring_exhausted_reply(),
+                            user=user, on_status=on_status,
+                        )
                     return self._finalise(
                         text, [], narration=content, user=user,
                         on_status=on_status,
@@ -1696,7 +1931,7 @@ class Orchestrator:
                     )
                     if attempt < prompt_attempts - 1:
                         effective = text + _core_authoring_prompt_nudge(
-                            pname, attempt,
+                            pname, attempt, text,
                         )
                         continue
                     return self._finalise(
@@ -1708,11 +1943,74 @@ class Orchestrator:
                     on_status=on_status,
                 )
         except Exception as e:
+            try:
+                from .openai_compat import RequestCancelled
+                if isinstance(e, RequestCancelled):
+                    log.info("llm request cancelled (fallback)")
+                    return SkillResult("Cancelled.", intent="chat", success=False)
+            except Exception:
+                pass
             log.warning("llm chat fallback failed: %s", e)
             return SkillResult(
                 self._lm_unreachable_msg(),
                 intent="chat", success=False,
             )
+
+    def _repair_failed_patch_once(
+        self,
+        *,
+        text: str,
+        user: str,
+        failure_reply: str,
+    ) -> SkillResult | None:
+        """Best-effort single retry when propose_patch is rejected.
+
+        This keeps self-improvement conversational: instead of failing hard on
+        the first bad patch (wrong file/path/platform assumptions), ask the
+        model for one corrected propose_patch immediately.
+        """
+        if not self._llm_ready():
+            return None
+        model = self.llm_cfg.model
+        all_tools = TOOLS_SPEC + self._user_tool_specs
+        repair_tools = _core_authoring_tool_specs(all_tools)
+        repair_text = (
+            text
+            + "\n\n[Patch self-repair attempt]\n"
+            + "Your previous propose_patch was rejected. Regenerate a corrected "
+            + "propose_patch now. Use existing Windows-compatible backend files "
+            + "and do not invent paths.\n"
+            + f"Rejection reason: {failure_reply}\n"
+            + "Return only one propose_patch tool call."
+        )
+        try:
+            resp = self._lm_native_chat(
+                model=model,
+                messages=self._build_messages(
+                    repair_text, user, "native",
+                    skill_authoring=False,
+                    core_authoring=True,
+                ),
+                tools=repair_tools,
+                temperature=0.2,
+                max_tokens=2200,
+                cancel_event=self._cancel_event,
+            )
+        except Exception as e:
+            log.warning("patch self-repair llm call failed: %s", e)
+            return None
+        tool_calls = _extract_tool_calls(resp)
+        if not tool_calls:
+            narration = _extract_content(resp)
+            if "<function=" in narration:
+                tool_calls = _parse_xml_tool_calls(narration)
+        if not tool_calls:
+            return None
+        pname, pargs = tool_calls[0]
+        if pname != "propose_patch":
+            return None
+        log.info("tool_call(repair): %s(%s)", pname, pargs)
+        return self._run_tool(pname, pargs, user)
 
     def _finalise(
         self,
@@ -1734,6 +2032,18 @@ class Orchestrator:
             for name, args in tool_calls:
                 log.info("tool_call: %s(%s)", name, args)
                 r = self._run_tool(name, args, user)
+                if (
+                    name == "propose_patch"
+                    and not r.success
+                    and _wants_core_capability(text)
+                ):
+                    repaired = self._repair_failed_patch_once(
+                        text=text,
+                        user=user,
+                        failure_reply=r.reply,
+                    )
+                    if repaired is not None:
+                        r = repaired
                 if _wants_user_skill(text) and r.intent == "unknown_tool":
                     r = SkillResult(
                         "You asked for a new skill, but I tried to run a tool "
@@ -1745,16 +2055,10 @@ class Orchestrator:
                 results.append(r)
             all_ok = all(r.success for r in results)
             tool_reply = " ".join(r.reply for r in results if r.reply).strip()
-            # Only let narration override the tool reply when it's substantive
-            # (>= 12 chars AND has alphabetic content). Coder models sometimes
-            # leave XML fragments as narration; we don't want those to hide a
-            # real error/success message from the tool handler.
-            narr_stripped = narration.strip()
-            narr_has_words = any(c.isalpha() for c in narr_stripped)
-            if narr_has_words and len(narr_stripped) >= 12:
-                reply = narr_stripped
-            else:
-                reply = tool_reply or "Done."
+            # When a tool executed, trust the tool result over model narration.
+            # Narration can contain stale/contradictory prose ("can't do this")
+            # even if propose_patch or another tool succeeded.
+            reply = tool_reply or "Done."
             intent = results[0].intent if len(results) == 1 else "tool_chain"
             self._history.append(("user", text))
             self._history.append(("assistant", reply))
@@ -1814,27 +2118,50 @@ class Orchestrator:
         - lexical overlap between request and skill name/description is high
         """
         if _wants_user_skill(text):
+            log.debug("auto-route skipped: request is skill-authoring text")
             return None
         # Runtime registry can be empty after backend code reloads; refresh once.
         if not self._user_skills and self.user_skills_mgr is not None:
             try:
                 self.user_skills_mgr.reload_all()
+                log.debug(
+                    "auto-route reload_all complete; user_skills=%s",
+                    sorted(self._user_skills.keys()),
+                )
             except Exception as e:
                 log.debug("user skill reload before auto-route failed: %s", e)
         if not self._user_skills:
+            log.debug("auto-route skipped: no user skills registered in runtime")
             return None
 
         norm_text = _norm(text)
         wants_storage = bool(re.search(r"\b(storage|disk|drive|space)\b", norm_text))
+        log.debug(
+            "auto-route start: text=%r norm=%r wants_storage=%s skills=%s",
+            text,
+            norm_text,
+            wants_storage,
+            sorted(self._user_skills.keys()),
+        )
 
         # Explicit ask always wins (e.g. "use check storage skill").
         m_exp = _EXPLICIT_SKILL_PAT.search(text or "")
         if m_exp:
             raw_name = (m_exp.group("name") or "").lower().strip()
             n = re.sub(r"\s+", "_", raw_name)
+            log.debug(
+                "auto-route explicit skill mention parsed: raw=%r canonical=%r",
+                raw_name,
+                n,
+            )
             if n in self._user_skills:
                 log.info("auto-routing explicit skill mention to %s", n)
                 return self._run_tool(n, {}, user)
+            log.debug(
+                "auto-route explicit skill %r not currently registered; available=%s",
+                n,
+                sorted(self._user_skills.keys()),
+            )
 
         # Deterministic storage preference.
         if wants_storage:
@@ -1842,6 +2169,7 @@ class Orchestrator:
                 n for n in self._user_skills.keys()
                 if any(k in n for k in ("storage", "disk", "drive", "space"))
             ])
+            log.debug("auto-route storage name hits=%s", name_hits)
             if len(name_hits) == 1:
                 log.info("auto-routing storage request to user skill %s", name_hits[0])
                 return self._run_tool(name_hits[0], {}, user)
@@ -1857,12 +2185,14 @@ class Orchestrator:
                 expanded_words.update(_norm_word(p) for p in w.split("_") if p)
         words = expanded_words
         if not words:
+            log.debug("auto-route skipped: no meaningful words after normalization")
             return None
 
         best_name = ""
         best_score = 0
         best_storage_name = ""
         best_storage_score = 0
+        scored: list[tuple[str, int, int]] = []
         for spec in self._user_tool_specs:
             fn = spec.get("function", {})
             name = str(fn.get("name") or "").strip()
@@ -1872,6 +2202,7 @@ class Orchestrator:
             req = params.get("required") or []
             # Keep this: auto-routing missing required args causes bad calls.
             if req:
+                log.debug("auto-route skip skill %s: required params=%s", name, req)
                 continue
             desc = str(fn.get("description") or "")
             skill_words = {
@@ -1885,6 +2216,7 @@ class Orchestrator:
             score = len(overlap)
             if name.lower().replace("_", " ") in norm_text:
                 score += 3
+            scored.append((name, score, len(overlap)))
             if wants_storage and ({"storage", "disk", "drive", "space"} & skill_words):
                 s_score = score + 4
                 if s_score > best_storage_score:
@@ -1894,6 +2226,11 @@ class Orchestrator:
                 best_name = name
                 best_score = score
 
+        if scored:
+            log.debug(
+                "auto-route skill scores=%s",
+                sorted(scored, key=lambda t: t[1], reverse=True),
+            )
         if wants_storage and best_storage_name:
             log.info(
                 "auto-routing storage request to user skill %s (score=%s)",
@@ -1902,6 +2239,12 @@ class Orchestrator:
             )
             return self._run_tool(best_storage_name, {}, user)
         if not best_name or best_score < 2:
+            log.debug(
+                "auto-route no winner: best_name=%r best_score=%s threshold=2 words=%s",
+                best_name,
+                best_score,
+                sorted(words),
+            )
             return None
         log.info("auto-routing request to user skill %s (score=%s)", best_name, best_score)
         return self._run_tool(best_name, {}, user)

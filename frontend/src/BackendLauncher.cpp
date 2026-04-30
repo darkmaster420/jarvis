@@ -82,7 +82,7 @@ bool BackendLauncher::portInUse(unsigned short port) {
 }
 
 bool BackendLauncher::start(std::string& info, bool dev_reload,
-                            double reload_interval_s) {
+                            double reload_interval_s, bool backend_debug_logs) {
     info.clear();
     fs::path app_root = exeDir();
     log_path_ = app_root / "backend.log";
@@ -165,6 +165,9 @@ bool BackendLauncher::start(std::string& info, bool dev_reload,
         cmd << L" --dev-reload --reload-interval "
             << std::to_wstring(reload_interval_s);
     }
+    if (backend_debug_logs) {
+        cmd << L" --log-level DEBUG";
+    }
     std::wstring cmdline = cmd.str();
 
     STARTUPINFOW si{};
@@ -213,6 +216,7 @@ bool BackendLauncher::start(std::string& info, bool dev_reload,
     spawned_ = true;
     info = "backend spawned (pid " + std::to_string(pi.dwProcessId) +
            (dev_reload ? ", dev-reload ON" : "") +
+           (backend_debug_logs ? ", log-level DEBUG" : "") +
            "); logs: " + fromWide(log_path.wstring());
     return true;
 }
@@ -226,7 +230,9 @@ void BackendLauncher::stop() {
 
 #else  // non-Windows stubs
 
-bool BackendLauncher::start(std::string& info) {
+bool BackendLauncher::start(std::string& info, bool /*dev_reload*/,
+                            double /*reload_interval_s*/,
+                            bool /*backend_debug_logs*/) {
     info = "BackendLauncher only implemented on Windows";
     return true;
 }

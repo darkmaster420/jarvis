@@ -42,6 +42,7 @@ ALLOWED_IMPORTS: set[str] = {
     "string", "textwrap", "collections", "itertools", "functools",
     "operator", "dataclasses", "typing", "fractions", "decimal",
     "calendar", "enum",
+    "shutil",
     # Safe URL / browser helpers (no raw sockets); used for “open in browser”
     # and small read-only fetches. Avoid secrets in URLs.
     "webbrowser", "urllib",
@@ -130,10 +131,21 @@ def _scan_ast(source: str) -> None:
     )
     if not has_handle:
         raise SkillValidationError("module must define `def handle(args)`")
-    # Must define PARAMETERS as an assignment.
+    # Must define PARAMETERS as an assignment (plain or annotated).
     has_params = any(
-        isinstance(n, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "PARAMETERS" for t in n.targets)
+        (
+            isinstance(n, ast.Assign)
+            and any(
+                isinstance(t, ast.Name) and t.id == "PARAMETERS"
+                for t in n.targets
+            )
+        )
+        or (
+            isinstance(n, ast.AnnAssign)
+            and isinstance(n.target, ast.Name)
+            and n.target.id == "PARAMETERS"
+            and n.value is not None
+        )
         for n in tree.body
     )
     if not has_params:
@@ -168,10 +180,18 @@ def _scan_ast_bundle(source: str) -> None:
                 f"attribute '{node.attr}' is not allowed")
 
     has_skills = any(
-        isinstance(n, ast.Assign)
-        and any(
-            isinstance(t, ast.Name) and t.id == "SKILLS"
-            for t in n.targets
+        (
+            isinstance(n, ast.Assign)
+            and any(
+                isinstance(t, ast.Name) and t.id == "SKILLS"
+                for t in n.targets
+            )
+        )
+        or (
+            isinstance(n, ast.AnnAssign)
+            and isinstance(n.target, ast.Name)
+            and n.target.id == "SKILLS"
+            and n.value is not None
         )
         for n in tree.body
     )

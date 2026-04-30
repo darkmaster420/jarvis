@@ -47,6 +47,32 @@ class PatchError(ValueError):
     pass
 
 
+def _ensure_required_exports(rel_canon: str, source: str) -> None:
+    """Guard critical runtime exports against accidental self-breakage."""
+    if rel_canon != "backend/jarvis/skills/system.py":
+        return
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return
+    fn_names = {
+        n.name for n in tree.body
+        if isinstance(n, ast.FunctionDef)
+    }
+    required = {
+        "prewarm_start_menu_cache",
+        "set_alias_lookup",
+        "open_app",
+        "close_app",
+    }
+    missing = sorted(required - fn_names)
+    if missing:
+        raise PatchError(
+            "system.py patch removed required exports used by runtime: "
+            + ", ".join(missing)
+        )
+
+
 def _resolve_patch_target(
     repo: Path,
     raw: str,
@@ -224,11 +250,21 @@ class PatchManager:
             new_content = new_content + "\n"
         rel_canon, abs_path = _resolve_patch_target(
             self.root, target, user_skills_dir=self.user_skills_dir)
-        if not abs_path.exists():
-            raise PatchError(
-                f"{target} doesn't exist; seed user_skills/skills.py first or "
-                "use create_user_skill for a new module file")
-        before = abs_path.read_text(encoding="utf-8")
+        existed_before = abs_path.exists()
+        if existed_before:
+            before = abs_path.read_text(encoding="utf-8")
+        else:
+            # Core patches may propose a new backend module. Keep this constrained
+            # to Python files inside backend/jarvis with an existing parent dir.
+            if rel_canon.startswith("backend/jarvis/") and abs_path.suffix == ".py":
+                if not abs_path.parent.exists():
+                    raise PatchError(
+                        f"{target} parent directory doesn't exist")
+                before = ""
+            else:
+                raise PatchError(
+                    f"{target} doesn't exist; seed user_skills/skills.py first or "
+                    "use create_user_skill for a new module file")
         if before == new_content:
             raise PatchError("no changes vs current file")
         if abs_path.suffix == ".py":
@@ -236,6 +272,7 @@ class PatchManager:
                 ast.parse(new_content)
             except SyntaxError as e:
                 raise PatchError(f"proposed content has a syntax error: {e}")
+            _ensure_required_exports(rel_canon, new_content)
 
         patch_id = _sha(f"{rel_canon}|{new_content}|{time.time()}|{uuid.uuid4()}")
         diff = _unified_diff(before, new_content, label=rel_canon)
@@ -244,6 +281,7 @@ class PatchManager:
             "target":        rel_canon,
             "description":   description,
             "created":       time.time(),
+            "existed_before": existed_before,
             "before_sha":    _sha(before),
             "diff":          diff,
             "new_content":   new_content,
@@ -261,10 +299,14 @@ class PatchManager:
         target = record.get("target")
         abs_path = _norm_target(
             self.root, target, user_skills_dir=self.user_skills_dir)
+        existed_before = bool(record.get("existed_before", True))
         if not abs_path.exists():
-            self._patch_path(patch_id).unlink(missing_ok=True)
-            raise PatchError(f"{target} no longer exists")
-        before = abs_path.read_text(encoding="utf-8")
+            if existed_before:
+                self._patch_path(patch_id).unlink(missing_ok=True)
+                raise PatchError(f"{target} no longer exists")
+            before = ""
+        else:
+            before = abs_path.read_text(encoding="utf-8")
         if _sha(before) != record.get("before_sha"):
             raise PatchError(
                 f"{target} has changed since this patch was proposed; "
@@ -276,9 +318,12 @@ class PatchManager:
                 ast.parse(new_content)
             except SyntaxError as e:
                 raise PatchError(f"proposed content no longer parses: {e}")
+            _ensure_required_exports(target, new_content)
 
         backup = abs_path.with_suffix(abs_path.suffix + ".bak")
-        shutil.copy2(abs_path, backup)
+        had_file = abs_path.exists()
+        if had_file:
+            shutil.copy2(abs_path, backup)
         abs_path.write_text(new_content, encoding="utf-8")
 
         # Smoke-test Python files via py_compile in a subprocess.
@@ -289,10 +334,16 @@ class PatchManager:
                     capture_output=True, text=True, timeout=10,
                 )
             except subprocess.TimeoutExpired:
-                shutil.move(str(backup), str(abs_path))
+                if had_file and backup.exists():
+                    shutil.move(str(backup), str(abs_path))
+                else:
+                    abs_path.unlink(missing_ok=True)
                 raise PatchError("py_compile timed out")
             if proc.returncode != 0:
-                shutil.move(str(backup), str(abs_path))
+                if had_file and backup.exists():
+                    shutil.move(str(backup), str(abs_path))
+                else:
+                    abs_path.unlink(missing_ok=True)
                 raise PatchError(
                     "py_compile rejected the patch: "
                     + (proc.stderr or proc.stdout).strip())

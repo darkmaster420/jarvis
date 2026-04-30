@@ -10,9 +10,13 @@
 
 #include <ixwebsocket/IXNetSystem.h>
 
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <string>
+#include <thread>
 
 #ifdef _WIN32
 
@@ -25,7 +29,13 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 static int run_app(int argc, char** argv) {
     std::string url         = "ws://127.0.0.1:8765";
     bool        spawn_back  = true;
+#ifdef JARVIS_DEBUG_HUD
+    bool        dev_hud     = true;
+    const bool  backend_debug_logs = true;
+#else
     bool        dev_hud     = false;
+    const bool  backend_debug_logs = false;
+#endif
     double      reload_interval_s = 0.8;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -42,10 +52,17 @@ static int run_app(int argc, char** argv) {
                 reload_interval_s = 0.8;
             }
         } else if (arg == "--help" || arg == "-h") {
+#ifdef JARVIS_DEBUG_HUD
+            std::printf(
+                "Usage: jarvis-debug [--url ws://host:port] [--no-backend] "
+                "[--dev-hud] [--reload-interval seconds]\n"
+                "Debug build: console attached; backend spawned with "
+                "--log-level DEBUG; --dev-hud on by default.\n");
+#else
             std::printf(
                 "Usage: jarvis [--url ws://host:port] [--no-backend] "
-                "[--dev-hud] [--reload-interval seconds]\n"
-            );
+                "[--dev-hud] [--reload-interval seconds]\n");
+#endif
             return 0;
         }
     }
@@ -62,22 +79,65 @@ static int run_app(int argc, char** argv) {
     ix::initNetSystem();
 
     jarvis::BackendLauncher backend;
+#ifdef JARVIS_DEBUG_HUD
+    struct BackendLogTailer {
+        std::atomic<bool> running{false};
+        std::thread worker;
+
+        void start(const std::string& path) {
+            stop();
+            if (path.empty()) return;
+            running = true;
+            worker = std::thread([this, path]() {
+                std::ifstream in(path, std::ios::in);
+                if (in) {
+                    in.seekg(0, std::ios::end);
+                }
+                while (running) {
+                    if (!in.is_open()) {
+                        in.clear();
+                        in.open(path, std::ios::in);
+                        if (in) in.seekg(0, std::ios::end);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(180));
+                        continue;
+                    }
+                    std::string line;
+                    if (std::getline(in, line)) {
+                        std::fprintf(stderr, "[backend] %s\n", line.c_str());
+                        continue;
+                    }
+                    in.clear();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                }
+            });
+        }
+
+        void stop() {
+            running = false;
+            if (worker.joinable()) worker.join();
+        }
+    } backend_log_tailer;
+#endif
     if (spawn_back) {
         std::string info;
-        if (backend.start(info, dev_hud, reload_interval_s)) {
+        if (backend.start(info, dev_hud, reload_interval_s, backend_debug_logs)) {
             std::fprintf(stderr, "[jarvis] %s\n", info.c_str());
         } else {
             std::fprintf(stderr, "[jarvis] backend launch failed: %s\n",
                          info.c_str());
         }
     }
+#ifdef JARVIS_DEBUG_HUD
+    backend_log_tailer.start(backend.logPath());
+#endif
 
     jarvis::SharedState state;
     jarvis::WsClient    ws(state, url);
-    auto restart_backend = [&backend, dev_hud, reload_interval_s]() -> std::string {
+    auto restart_backend = [&backend, dev_hud, reload_interval_s,
+                            backend_debug_logs]() -> std::string {
         backend.stop();
         std::string info;
-        if (backend.start(info, dev_hud, reload_interval_s)) {
+        if (backend.start(info, dev_hud, reload_interval_s, backend_debug_logs)) {
             return "Backend restarted. " + info;
         }
         return "Backend restart failed: " + info;
@@ -94,6 +154,9 @@ static int run_app(int argc, char** argv) {
         ws.stop();
         hud.shutdown();
     }
+#ifdef JARVIS_DEBUG_HUD
+    backend_log_tailer.stop();
+#endif
     backend.stop();
     ix::uninitNetSystem();
     return rc;

@@ -1,0 +1,150 @@
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-MKDIR.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -Dcfgdir=/Debug -P C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/tmp/ixwebsocket-populate-mkdirs.cmake
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-mkdir
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-DOWNLOAD.RULE
+setlocal
+cd C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE -P C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/tmp/ixwebsocket-populate-gitclone.cmake
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-download
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-UPDATE.RULE
+setlocal
+cd C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -Dcan_fetch=YES -DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE -P C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/tmp/ixwebsocket-populate-gitupdate.cmake
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-PATCH.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-patch
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-CONFIGURE.RULE
+setlocal
+cd C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-configure
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-BUILD.RULE
+setlocal
+cd C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-build
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-INSTALL.RULE
+setlocal
+cd C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-install
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\045D68F1B420145F4638FEFAB487457F\IXWEBSOCKET-POPULATE-TEST.RULE
+setlocal
+cd C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E echo_append
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-test
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\F3BF023F3B7EBFA752991FA48B672A3C\IXWEBSOCKET-POPULATE-COMPLETE.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -E make_directory C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/CMakeFiles/Debug
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/CMakeFiles/Debug/ixwebsocket-populate-complete
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -E touch C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/ixwebsocket-populate-prefix/src/ixwebsocket-populate-stamp/Debug/ixwebsocket-populate-done
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKEFILES\D008530AB0FA87D6A592A6A0E6F86D18\IXWEBSOCKET-POPULATE.RULE
+setlocal
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\BERTIE\.VSCODE\CODE\JARVIS\FRONTEND\BUILD-DEBUG-HUD\_DEPS\IXWEBSOCKET-SUBBUILD\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild -BC:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild --check-stamp-file C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-subbuild/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

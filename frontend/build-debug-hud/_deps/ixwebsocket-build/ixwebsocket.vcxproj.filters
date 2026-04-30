@@ -1,0 +1,276 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXBench.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXCancellationRequest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXConnectionState.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXDNSLookup.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXExponentialBackoff.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGetFreePort.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGzipCodec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttp.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpClient.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXNetSystem.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterrupt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptFactory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptPipe.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptEvent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSetThreadName.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketConnect.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketFactory.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketTLSOptions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXStrCaseCompare.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUdpSocket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUrlParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUuid.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUserAgent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocket.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketCloseConstants.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHandshake.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHttpHeaders.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflate.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateCodec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateOptions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketProxyServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketServer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketTransport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXBase64.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXBench.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXCancellationRequest.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXConnectionState.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXDNSLookup.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXExponentialBackoff.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGetFreePort.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGzipCodec.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpClient.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXNetSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXProgressCallback.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterrupt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptFactory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptPipe.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptEvent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSetThreadName.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocket.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketConnect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketFactory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketTLSOptions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXStrCaseCompare.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUdpSocket.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUniquePtr.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUrlParser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUuid.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUtf8Validator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUserAgent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocket.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketCloseConstants.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketCloseInfo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketErrorInfo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHandshake.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHandshakeKeyGen.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHttpHeaders.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketInitResult.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketMessage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketMessageType.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketOpenInfo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflate.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateCodec.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateOptions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketProxyServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketSendData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketSendInfo.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketServer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketTransport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketVersion.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{5C223FD3-E505-3A8E-BAFC-BB26DCD6C284}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{8A6365F2-D37A-3640-955B-8B03EB1528AD}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

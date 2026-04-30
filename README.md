@@ -93,6 +93,13 @@ cmake --build frontend\build --config Release
 Add `-DJARVIS_CONSOLE=ON` to build with a console attached (useful for seeing
 log/error output during development).
 
+For a single-command debug session (Debug HUD build + backend `DEBUG` logs +
+backend auto-reload), run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_debug_hud.ps1
+```
+
 The HUD appears in the top-right of your primary monitor as a transparent,
 frameless, always-on-top orb. Colour changes indicate state:
 
@@ -198,6 +205,67 @@ Everything lives in [`config.yaml`](config.yaml). Common tweaks:
 - Custom wake word training (use the bundled `hey_jarvis`)
 - Cloud fallbacks
 - Settings UI (edit `config.yaml`)
+
+## 10. Roadmap (Planned)
+
+This is a staged roadmap so Jarvis keeps getting smarter without sacrificing
+runtime stability.
+
+### Phase 1 - Core stability
+
+- Harden self-improvement (`propose_patch`) reliability with better retries and
+  deterministic fallbacks.
+- Add regression tests for orchestrator routing, interrupt cancellation, and
+  patch approval behavior.
+- Add structured telemetry for why requests route to runtime tools, user skills,
+  or core-authoring mode.
+
+### Phase 2 - Agent intelligence
+
+- Route models by task type (lighter model for chat, stronger coder for core edits).
+- Add confidence checks and clarification prompts before risky actions.
+- Improve memory for user preferences and previously successful patterns.
+
+### Phase 3 - Vision expansion (desktop + camera)
+
+- Keep desktop-vision loop and add a separate camera input pipeline.
+- Add camera scene captioning, object detection, OCR, and motion-event summaries.
+- Add strict privacy controls (explicit toggle, visible camera indicator, local-only mode).
+
+### Phase 4 - Face recognition (safety first)
+
+- Start with face detection and known-person labels (no auto-actions at first).
+- Add explicit enrollment consent plus per-profile delete/retrain controls.
+- Add confidence thresholds and "unknown person" fallback behavior.
+
+### Phase 5 - Integrations and automations
+
+- Add first-class calendar/email/task integrations with permission tiers.
+- Promote Docker/dev workflows into built-in capabilities.
+- Add optional home-lab/service integrations for alerts and maintenance tasks.
+
+### Phase 6 - Product polish
+
+- Unify settings UX for voice, skills, model selection, and privacy.
+- Add clear "why Jarvis chose this action" explanations in HUD.
+- Maintain stable vs debug/release channels for safer updates.
+
+### Near-term milestones
+
+- M1: Self-improve reliability + regression tests.
+- M2: Model routing + confidence/clarification behavior.
+- M3: Camera vision MVP (caption + detection + privacy controls).
+- M4: Face recognition MVP (consent-based labeling, no auto-act).
+
+### Current focus (fix tracking)
+
+- [ ] Core authoring emits valid `propose_patch` tool calls consistently.
+- [ ] Reduce `finish=length` truncation during core patch generation.
+- [ ] Strengthen retry path (strict JSON tool-call shape before free-form retries).
+- [ ] Add deterministic fallback patch path when retries exhaust.
+- [ ] Validate patches preserve required exports and do not break backend startup.
+- [ ] Add regression tests for routing, interrupt cancellation, and patch approval.
+- [ ] Improve HUD feedback when patch IDs are stale or rejected.
 
 ## License
 

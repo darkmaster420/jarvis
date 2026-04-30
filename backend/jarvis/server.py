@@ -120,6 +120,10 @@ class JarvisServer:
         self._broadcast_queue: asyncio.Queue[dict] = asyncio.Queue()
         self._elevenlabs_voice_cache: list[dict] = []
         self._narration_lock = asyncio.Lock()
+        self._silence_nudge_task: asyncio.Task | None = None
+        self._turn_progress_announced: set[int] = set()
+        self._turn_last_progress_at: dict[int, float] = {}
+        self._turn_progress_idx: dict[int, int] = {}
         # False after background ensure_ollama_models() returns (HUD can show Ollama status).
         self._ollama_bootstrap_pending = True
 
@@ -390,8 +394,20 @@ class JarvisServer:
                     await self.broadcast("patches", items=patches)
                     await self._speak(speak)
                 except Exception as e:
-                    await self.broadcast("error",
-                                         message=f"Patch failed: {e}")
+                    msg_text = str(e)
+                    if "no such patch" in msg_text.lower():
+                        await self.broadcast(
+                            "error",
+                            message=(
+                                "That patch no longer exists (likely already applied or rejected). "
+                                "Refreshing patch list."
+                            ),
+                        )
+                        patches = await asyncio.to_thread(self.patches.list_patches)
+                        await self.broadcast("patches", items=patches)
+                    else:
+                        await self.broadcast("error",
+                                             message=f"Patch failed: {e}")
         elif cmd == "reject_patch":
             pid = (msg.get("id") or "").strip()
             if pid:
@@ -401,6 +417,17 @@ class JarvisServer:
 
     async def _begin_listening(self) -> None:
         self._turn_id += 1
+        self._turn_progress_announced = {
+            t for t in self._turn_progress_announced if t >= self._turn_id - 4
+        }
+        self._turn_last_progress_at = {
+            t: ts for t, ts in self._turn_last_progress_at.items()
+            if t >= self._turn_id - 4
+        }
+        self._turn_progress_idx = {
+            t: idx for t, idx in self._turn_progress_idx.items()
+            if t >= self._turn_id - 4
+        }
         self.tts.stop()
         pre_roll = self.audio.ring.read_last(self.cfg.vad.pre_roll_ms / 1000.0)
         self._pending_utterance = [pre_roll] if pre_roll.size else []
@@ -418,6 +445,10 @@ class JarvisServer:
         returns, its result is ignored instead of being spoken.
         """
         self._turn_id += 1
+        if self._silence_nudge_task is not None:
+            self._silence_nudge_task.cancel()
+            self._silence_nudge_task = None
+        self.orch.cancel_inflight()
         self.tts.stop()
         self._pending_utterance.clear()
         self.vad.reset()
@@ -425,6 +456,66 @@ class JarvisServer:
         await self._set_state(State.IDLE)
         if listen_after:
             await self._begin_listening()
+
+    def _arm_silence_nudge(self, turn_id: int, *, delay_s: float = 1.0) -> None:
+        if self._silence_nudge_task is not None:
+            self._silence_nudge_task.cancel()
+            self._silence_nudge_task = None
+        self._turn_last_progress_at[turn_id] = time.monotonic()
+        progress_lines = (
+            "Still working on it.",
+            "One sec, I am still processing this.",
+            "Thanks for waiting, I am checking that now.",
+            "Almost there, still working through it.",
+            "I am still on it, just taking a moment.",
+            "Working through the details now.",
+            "Thanks for your patience, continuing now.",
+            "I am still processing this request.",
+            "I am validating the result before I respond.",
+            "Still with you, finishing this up.",
+            "I am checking another approach now.",
+            "Taking a little longer than usual, still in progress.",
+            "I am still working through this carefully.",
+            "I have not forgotten, still processing.",
+            "I am verifying details before I answer.",
+            "Still in progress, thanks for hanging tight.",
+        )
+        ack_lines = (
+            "I will work on it.",
+            "Got it.",
+            "Sure, right on it.",
+            "Okay, I am on it.",
+        )
+
+        async def _later() -> None:
+            try:
+                await asyncio.sleep(max(0.1, delay_s))
+                if turn_id != self._turn_id or self.state != State.THINKING:
+                    return
+                # First anti-silence line should be a simple acknowledgement.
+                self._turn_progress_announced.add(turn_id)
+                self._turn_last_progress_at[turn_id] = time.monotonic()
+                ack = ack_lines[turn_id % len(ack_lines)]
+                await self._think_speak(turn_id, ack)
+                # Keep speaking periodic progress while we're still thinking.
+                while True:
+                    if turn_id != self._turn_id:
+                        return
+                    if self.state != State.THINKING:
+                        return
+                    last = self._turn_last_progress_at.get(turn_id, 0.0)
+                    if (time.monotonic() - last) >= 50.0:
+                        self._turn_progress_announced.add(turn_id)
+                        self._turn_last_progress_at[turn_id] = time.monotonic()
+                        idx = self._turn_progress_idx.get(turn_id, 0)
+                        line = progress_lines[idx % len(progress_lines)]
+                        self._turn_progress_idx[turn_id] = idx + 1
+                        await self._think_speak(turn_id, line)
+                    await asyncio.sleep(1.0)
+            except asyncio.CancelledError:
+                return
+
+        self._silence_nudge_task = asyncio.create_task(_later())
 
     async def _process_utterance(self) -> None:
         turn_id = self._turn_id
@@ -488,13 +579,19 @@ class JarvisServer:
 
         def on_status(msg: str) -> None:
             def _schedule() -> None:
+                self._turn_progress_announced.add(turn_id)
+                self._turn_last_progress_at[turn_id] = time.monotonic()
                 asyncio.create_task(self._think_speak(turn_id, msg))
 
             self.loop.call_soon_threadsafe(_schedule)
 
+        self._arm_silence_nudge(turn_id, delay_s=1.0)
         result = await asyncio.to_thread(
             self.orch.handle, text, user, on_status
         )
+        if self._silence_nudge_task is not None:
+            self._silence_nudge_task.cancel()
+            self._silence_nudge_task = None
         if turn_id != self._turn_id:
             log.info("discarding LLM result from interrupted turn")
             return
@@ -514,17 +611,34 @@ class JarvisServer:
             return
         self._turn_id += 1
         turn_id = self._turn_id
+        self._turn_progress_announced = {
+            t for t in self._turn_progress_announced if t >= turn_id - 4
+        }
+        self._turn_last_progress_at = {
+            t: ts for t, ts in self._turn_last_progress_at.items()
+            if t >= turn_id - 4
+        }
+        self._turn_progress_idx = {
+            t: idx for t, idx in self._turn_progress_idx.items()
+            if t >= turn_id - 4
+        }
         self.tts.stop()
         await self._set_state(State.THINKING)
         await self.broadcast("transcript", text=text, user=user, score=1.0)
 
         def on_status(msg: str) -> None:
             def _schedule() -> None:
+                self._turn_progress_announced.add(turn_id)
+                self._turn_last_progress_at[turn_id] = time.monotonic()
                 asyncio.create_task(self._think_speak(turn_id, msg))
 
             self.loop.call_soon_threadsafe(_schedule)
 
+        self._arm_silence_nudge(turn_id, delay_s=1.0)
         result = await asyncio.to_thread(self.orch.handle, text, user, on_status)
+        if self._silence_nudge_task is not None:
+            self._silence_nudge_task.cancel()
+            self._silence_nudge_task = None
         if turn_id != self._turn_id:
             log.info("discarding text prompt result from interrupted turn")
             return
@@ -552,6 +666,7 @@ class JarvisServer:
         async with self._narration_lock:
             if turn_id != self._turn_id:
                 return
+            self._turn_last_progress_at[turn_id] = time.monotonic()
             await self.broadcast("narration_start", text=spoken)
             done = asyncio.Event()
 
@@ -571,15 +686,18 @@ class JarvisServer:
         if not text:
             await self._set_state(State.IDLE)
             return
-        await self._set_state(State.SPEAKING)
-        await self.broadcast("speaking_start", text=text)
-        done = asyncio.Event()
+        # Serialize final reply speech behind thinking narration to avoid
+        # overlapped audio when a status line and final reply race.
+        async with self._narration_lock:
+            await self._set_state(State.SPEAKING)
+            await self.broadcast("speaking_start", text=text)
+            done = asyncio.Event()
 
-        def on_end() -> None:
-            self.loop.call_soon_threadsafe(done.set)
+            def on_end() -> None:
+                self.loop.call_soon_threadsafe(done.set)
 
-        self.tts.speak(text, on_end=on_end)
-        await done.wait()
+            self.tts.speak(text, on_end=on_end)
+            await done.wait()
         if turn_id is not None and turn_id != self._turn_id:
             return
         await self.broadcast("speaking_end")

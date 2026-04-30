@@ -94,10 +94,18 @@ struct SharedState {
         std::lock_guard<std::mutex> lk(text_mutex);
         last_transcript = std::move(t);
         last_user       = std::move(user);
+        // New user turn started: drop stale assistant output immediately.
+        last_reply.clear();
     }
     void setReply(std::string t) {
         std::lock_guard<std::mutex> lk(text_mutex);
         last_reply = std::move(t);
+    }
+    void clearForNewPrompt() {
+        std::lock_guard<std::mutex> lk(text_mutex);
+        last_transcript.clear();
+        last_reply.clear();
+        status_line.clear();
     }
     void setStatus(std::string t) {
         std::lock_guard<std::mutex> lk(text_mutex);

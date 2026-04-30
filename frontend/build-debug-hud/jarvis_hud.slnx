@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Solution>
+	<Configurations>
+		<BuildType Name="Debug"/>
+		<BuildType Name="Release"/>
+		<BuildType Name="MinSizeRel"/>
+		<BuildType Name="RelWithDebInfo"/>
+		<Platform Name="x64"/>
+	</Configurations>
+	<Project Path="ALL_BUILD.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="5de3326e-7554-39bd-bb98-c0418af1f13a" DefaultStartup="true">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="imgui.vcxproj"/>
+		<BuildDependency Project="_deps/ixwebsocket-build/ixwebsocket.vcxproj"/>
+		<BuildDependency Project="jarvis_debug_hud.vcxproj"/>
+		<BuildDependency Project="jarvis_hud.vcxproj"/>
+		<Build Solution="Debug|*" Project="false"/>
+		<Build Solution="Release|*" Project="false"/>
+		<Build Solution="MinSizeRel|*" Project="false"/>
+		<Build Solution="RelWithDebInfo|*" Project="false"/>
+	</Project>
+	<Project Path="ZERO_CHECK.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="222d16a4-597b-3819-b816-670afd005fe5"/>
+	<Project Path="imgui.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="a90cdcea-3b5b-30a6-b72d-641c731c9aa9">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="_deps/ixwebsocket-build/ixwebsocket.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="2a707704-9f0f-3f7b-a40e-8152086ac9be">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+	</Project>
+	<Project Path="jarvis_debug_hud.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="c83fe1c0-a05f-3320-a19a-94dc9d54913e">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="imgui.vcxproj"/>
+		<BuildDependency Project="_deps/ixwebsocket-build/ixwebsocket.vcxproj"/>
+	</Project>
+	<Project Path="jarvis_hud.vcxproj" Type="8bc9ceb8-8b4a-11d0-8d11-00a0c91bc942" Id="b684718e-8578-3312-a87e-1c4ac4ace2c1">
+		<BuildDependency Project="ZERO_CHECK.vcxproj"/>
+		<BuildDependency Project="imgui.vcxproj"/>
+		<BuildDependency Project="_deps/ixwebsocket-build/ixwebsocket.vcxproj"/>
+	</Project>
+</Solution>

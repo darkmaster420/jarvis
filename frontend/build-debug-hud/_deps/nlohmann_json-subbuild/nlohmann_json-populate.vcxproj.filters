@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\84ff2d44b15ecccb0e258aebbfa5c317\nlohmann_json-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\9f3f42a1c87fe48a28470bd648dc5485\nlohmann_json-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\057912e01bef106f6c8e253ec9241318\nlohmann_json-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\nlohmann_json-subbuild\CMakeFiles\nlohmann_json-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D15485A7-0E96-3AA6-AC1D-06DE604FA320}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

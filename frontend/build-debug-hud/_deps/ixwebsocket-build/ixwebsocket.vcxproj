@@ -1,0 +1,410 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="MinSizeRel|x64">
+      <Configuration>MinSizeRel</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="RelWithDebInfo|x64">
+      <Configuration>RelWithDebInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{2A707704-9F0F-3F7B-A40E-8152086AC9BE}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>ixwebsocket</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'" Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ixwebsocket.dir\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">ixwebsocket</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ixwebsocket.dir\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">ixwebsocket</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\MinSizeRel\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">ixwebsocket.dir\MinSizeRel\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">ixwebsocket</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">.lib</TargetExt>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\RelWithDebInfo\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">ixwebsocket.dir\RelWithDebInfo\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">ixwebsocket</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">.lib</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ConformanceMode>true</ConformanceMode>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR="Debug"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR=\"Debug\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ConformanceMode>true</ConformanceMode>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR="Release"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR=\"Release\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ConformanceMode>true</ConformanceMode>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MinSpace</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR="MinSizeRel"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR=\"MinSizeRel\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <BufferSecurityCheck></BufferSecurityCheck>
+      <CallingConvention></CallingConvention>
+      <ConformanceMode>true</ConformanceMode>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <FloatingPointModel></FloatingPointModel>
+      <ForceConformanceInForLoopScope></ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData></RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType></TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR="RelWithDebInfo"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS;NOMINMAX;CMAKE_INTDIR=\"RelWithDebInfo\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Building Custom Rule C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-src/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Bertie/.vscode/code/Jarvis/frontend -BC:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud --check-stamp-file C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Building Custom Rule C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-src/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Bertie/.vscode/code/Jarvis/frontend -BC:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud --check-stamp-file C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">Building Custom Rule C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-src/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Bertie/.vscode/code/Jarvis/frontend -BC:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud --check-stamp-file C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='MinSizeRel|x64'">false</LinkObjects>
+      <Message Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">Building Custom Rule C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-src/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Bertie/.vscode/code/Jarvis/frontend -BC:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud --check-stamp-file C:/Users/Bertie/.vscode/code/Jarvis/frontend/build-debug-hud/_deps/ixwebsocket-build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Program Files\CMake\share\cmake-4.3\Modules\GNUInstallDirs.cmake;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-build\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='RelWithDebInfo|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXBench.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXCancellationRequest.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXConnectionState.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXDNSLookup.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXExponentialBackoff.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGetFreePort.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGzipCodec.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttp.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpClient.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpServer.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXNetSystem.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterrupt.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptFactory.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptPipe.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptEvent.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSetThreadName.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocket.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketConnect.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketFactory.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketServer.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketTLSOptions.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXStrCaseCompare.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUdpSocket.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUrlParser.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUuid.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUserAgent.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocket.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketCloseConstants.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHandshake.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHttpHeaders.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflate.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateCodec.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateOptions.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketProxyServer.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketServer.cpp" />
+    <ClCompile Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketTransport.cpp" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXBase64.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXBench.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXCancellationRequest.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXConnectionState.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXDNSLookup.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXExponentialBackoff.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGetFreePort.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXGzipCodec.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttp.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpClient.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXHttpServer.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXNetSystem.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXProgressCallback.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterrupt.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptFactory.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptPipe.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSelectInterruptEvent.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSetThreadName.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocket.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketConnect.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketFactory.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketServer.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXSocketTLSOptions.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXStrCaseCompare.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUdpSocket.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUniquePtr.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUrlParser.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUuid.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUtf8Validator.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXUserAgent.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocket.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketCloseConstants.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketCloseInfo.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketErrorInfo.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHandshake.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHandshakeKeyGen.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketHttpHeaders.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketInitResult.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketMessage.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketMessageType.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketOpenInfo.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflate.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateCodec.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketPerMessageDeflateOptions.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketProxyServer.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketSendData.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketSendInfo.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketServer.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketTransport.h" />
+    <ClInclude Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-src\ixwebsocket\IXWebSocketVersion.h" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\ZERO_CHECK.vcxproj">
+      <Project>{222D16A4-597B-3819-B816-670AFD005FE5}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

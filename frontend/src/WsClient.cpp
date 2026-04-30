@@ -131,6 +131,7 @@ void WsClient::sendRaw(const std::string& payload) {
 }
 
 void WsClient::sendPrompt(const std::string& text) {
+    state_.clearForNewPrompt();
     json j = {
         {"cmd", "prompt"},
         {"user", "guest"},
@@ -255,119 +256,125 @@ void WsClient::dispatch(const std::string& payload) {
     } catch (...) {
         return;
     }
-    const std::string ev = j.value("event", "");
-    if (ev == "hello") {
-        state_.state = stateFromString(j.value("state", "idle"));
-        state_.muted = j.value("muted", false);
-        if (j.contains("profiles") && j["profiles"].is_array()) {
+    try {
+        const std::string ev = j.value("event", "");
+        if (ev == "hello") {
+            state_.state = stateFromString(j.value("state", "idle"));
+            state_.muted = j.value("muted", false);
+            if (j.contains("profiles") && j["profiles"].is_array()) {
+                std::lock_guard<std::mutex> lk(state_.settings_mutex);
+                state_.available_profiles.clear();
+                for (const auto& p : j["profiles"]) {
+                    state_.available_profiles.push_back(p.get<std::string>());
+                }
+            }
+            if (j.contains("settings")) applySettings(state_, j["settings"]);
+            requestUserSkills();
+            requestPatches();
+        } else if (ev == "profiles") {
             std::lock_guard<std::mutex> lk(state_.settings_mutex);
             state_.available_profiles.clear();
-            for (const auto& p : j["profiles"]) {
-                state_.available_profiles.push_back(p.get<std::string>());
+            if (j.contains("items") && j["items"].is_array()) {
+                for (const auto& p : j["items"]) {
+                    state_.available_profiles.push_back(p.get<std::string>());
+                }
             }
-        }
-        if (j.contains("settings")) applySettings(state_, j["settings"]);
-        requestUserSkills();
-        requestPatches();
-    } else if (ev == "profiles") {
-        std::lock_guard<std::mutex> lk(state_.settings_mutex);
-        state_.available_profiles.clear();
-        if (j.contains("items") && j["items"].is_array()) {
-            for (const auto& p : j["items"]) {
-                state_.available_profiles.push_back(p.get<std::string>());
+        } else if (ev == "settings") {
+            applySettings(state_, j);
+        } else if (ev == "user_skills") {
+            std::lock_guard<std::mutex> lk(state_.settings_mutex);
+            state_.available_user_skills.clear();
+            if (j.contains("items") && j["items"].is_array()) {
+                for (const auto& it : j["items"]) {
+                    SharedState::UserSkillItem s;
+                    s.name = it.value("name", "");
+                    s.description = it.value("description", "");
+                    s.source = it.value("source", "");
+                    if (!s.name.empty()) state_.available_user_skills.push_back(std::move(s));
+                }
             }
-        }
-    } else if (ev == "settings") {
-        applySettings(state_, j);
-    } else if (ev == "user_skills") {
-        std::lock_guard<std::mutex> lk(state_.settings_mutex);
-        state_.available_user_skills.clear();
-        if (j.contains("items") && j["items"].is_array()) {
-            for (const auto& it : j["items"]) {
-                SharedState::UserSkillItem s;
-                s.name = it.value("name", "");
-                s.description = it.value("description", "");
-                s.source = it.value("source", "");
-                if (!s.name.empty()) state_.available_user_skills.push_back(std::move(s));
+        } else if (ev == "state") {
+            state_.state = stateFromString(j.value("state", "idle"));
+        } else if (ev == "wake") {
+            state_.setStatus("Wake word detected");
+        } else if (ev == "listening") {
+            state_.state = HudState::Listening;
+        } else if (ev == "transcript") {
+            state_.setTranscript(j.value("text", ""), j.value("user", "guest"));
+            state_.setStatus("");
+        } else if (ev == "narration_start") {
+            // Spoken "thinking" line while the model runs; keep orb in thinking.
+            state_.setStatus(j.value("text", ""));
+        } else if (ev == "narration_end") {
+            state_.setStatus("");
+        } else if (ev == "reply") {
+            state_.setReply(j.value("text", ""));
+        } else if (ev == "speaking_start") {
+            state_.state = HudState::Speaking;
+        } else if (ev == "speaking_end") {
+            state_.state = HudState::Idle;
+        } else if (ev == "cancelled") {
+            state_.setStatus("Stopped.");
+        } else if (ev == "muted") {
+            state_.muted = j.value("value", false);
+        } else if (ev == "enroll_progress") {
+            int c = j.value("collected", 0);
+            int t = j.value("target", 5);
+            std::string n = j.value("name", "");
+            bool vref     = j.value("refine", false);
+            state_.enrolling        = true;
+            state_.enroll_refine    = vref;
+            state_.enroll_collected = c;
+            state_.enroll_target    = t;
+            {
+                std::lock_guard<std::mutex> lk(state_.text_mutex);
+                state_.enroll_name = n;
             }
-        }
-    } else if (ev == "state") {
-        state_.state = stateFromString(j.value("state", "idle"));
-    } else if (ev == "wake") {
-        state_.setStatus("Wake word detected");
-    } else if (ev == "listening") {
-        state_.state = HudState::Listening;
-    } else if (ev == "transcript") {
-        state_.setTranscript(j.value("text", ""), j.value("user", "guest"));
-        state_.setStatus("");
-    } else if (ev == "narration_start") {
-        // Spoken "thinking" line while the model runs; keep orb in thinking.
-        state_.setStatus(j.value("text", ""));
-    } else if (ev == "narration_end") {
-        state_.setStatus("");
-    } else if (ev == "reply") {
-        state_.setReply(j.value("text", ""));
-    } else if (ev == "speaking_start") {
-        state_.state = HudState::Speaking;
-    } else if (ev == "speaking_end") {
-        state_.state = HudState::Idle;
-    } else if (ev == "cancelled") {
-        state_.setStatus("Stopped.");
-    } else if (ev == "muted") {
-        state_.muted = j.value("value", false);
-    } else if (ev == "enroll_progress") {
-        int c = j.value("collected", 0);
-        int t = j.value("target", 5);
-        std::string n = j.value("name", "");
-        bool vref     = j.value("refine", false);
-        state_.enrolling        = true;
-        state_.enroll_refine    = vref;
-        state_.enroll_collected = c;
-        state_.enroll_target    = t;
-        {
-            std::lock_guard<std::mutex> lk(state_.text_mutex);
-            state_.enroll_name = n;
-        }
-        state_.setStatus(
-            (vref ? "Refining " : "Enrolling ") + n + ": sample "
-            + std::to_string(c) + " of " + std::to_string(t)
-        );
-    } else if (ev == "enroll_done") {
-        state_.enrolling        = false;
-        state_.enroll_refine    = false;
-        state_.enroll_collected = 0;
-        bool ok  = j.value("ok", false);
-        bool vfr = j.value("refine", false);
-        std::string n = j.value("name", "");
-        if (ok) {
-            state_.setStatus(vfr ? ("Voice profile updated for " + n + ".")
-                                 : ("Enrolled " + n + "."));
-        } else {
-            state_.setStatus("Enrollment failed for " + n + ".");
-        }
-    } else if (ev == "enroll_cancelled") {
-        state_.enrolling        = false;
-        state_.enroll_refine    = false;
-        state_.enroll_collected = 0;
-        state_.setStatus("Enrollment cancelled.");
-    } else if (ev == "patches") {
-        std::lock_guard<std::mutex> lk(state_.patches_mutex);
-        state_.pending_patches.clear();
-        if (j.contains("items") && j["items"].is_array()) {
-            for (const auto& it : j["items"]) {
-                SharedState::PatchItem p;
-                p.id          = it.value("id", "");
-                p.target      = it.value("target", "");
-                p.description = it.value("description", "");
-                p.diff        = it.value("diff", "");
-                p.created     = it.value("created", 0.0);
-                if (!p.id.empty()) state_.pending_patches.push_back(std::move(p));
+            state_.setStatus(
+                (vref ? "Refining " : "Enrolling ") + n + ": sample "
+                + std::to_string(c) + " of " + std::to_string(t)
+            );
+        } else if (ev == "enroll_done") {
+            state_.enrolling        = false;
+            state_.enroll_refine    = false;
+            state_.enroll_collected = 0;
+            bool ok  = j.value("ok", false);
+            bool vfr = j.value("refine", false);
+            std::string n = j.value("name", "");
+            if (ok) {
+                state_.setStatus(vfr ? ("Voice profile updated for " + n + ".")
+                                     : ("Enrolled " + n + "."));
+            } else {
+                state_.setStatus("Enrollment failed for " + n + ".");
             }
+        } else if (ev == "enroll_cancelled") {
+            state_.enrolling        = false;
+            state_.enroll_refine    = false;
+            state_.enroll_collected = 0;
+            state_.setStatus("Enrollment cancelled.");
+        } else if (ev == "patches") {
+            std::lock_guard<std::mutex> lk(state_.patches_mutex);
+            state_.pending_patches.clear();
+            if (j.contains("items") && j["items"].is_array()) {
+                for (const auto& it : j["items"]) {
+                    SharedState::PatchItem p;
+                    p.id          = it.value("id", "");
+                    p.target      = it.value("target", "");
+                    p.description = it.value("description", "");
+                    p.diff        = it.value("diff", "");
+                    p.created     = it.value("created", 0.0);
+                    if (!p.id.empty()) state_.pending_patches.push_back(std::move(p));
+                }
+            }
+        } else if (ev == "patch_applied") {
+            state_.setStatus("Patch applied: " + j.value("target", ""));
+        } else if (ev == "error") {
+            state_.setStatus("Error: " + j.value("message", ""));
         }
-    } else if (ev == "patch_applied") {
-        state_.setStatus("Patch applied: " + j.value("target", ""));
-    } else if (ev == "error") {
-        state_.setStatus("Error: " + j.value("message", ""));
+    } catch (const std::exception& e) {
+        std::string preview = payload.substr(0, 260);
+        std::fprintf(stderr, "[jarvis] ws dispatch error: %s | payload: %s\n",
+                     e.what(), preview.c_str());
     }
 }
 

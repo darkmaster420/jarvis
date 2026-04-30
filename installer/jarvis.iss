@@ -1,5 +1,5 @@
 #define MyAppName "Jarvis"
-#define MyAppVersion "0.2.24"
+#define MyAppVersion "0.2.48"
 #define MyAppPublisher "Jarvis"
 #define MyAppExeName "Jarvis.exe"
 
@@ -9,7 +9,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 ; Installer EXE and ARP (Apps & features) use this 4-part version
-VersionInfoVersion=0.2.24.0
+VersionInfoVersion=0.2.48.0
 DefaultDirName={autopf}\Jarvis
 DefaultGroupName=Jarvis
 DisableProgramGroupPage=yes
@@ -24,7 +24,7 @@ PrivilegesRequired=admin
 SetupLogging=yes
 VersionInfoDescription={#MyAppName} Windows installer
 VersionInfoProductName={#MyAppName}
-VersionInfoProductVersion=0.2.24.0
+VersionInfoProductVersion=0.2.48.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -38,10 +38,12 @@ Source: "..\dist\Jarvis\*"; DestDir: "{app}"; Excludes: "backend\.venv\*,*\__pyc
 
 [Icons]
 Name: "{group}\Jarvis"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{group}\Jarvis (Debug)"; Filename: "{app}\JarvisDebug.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\Jarvis"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\DirectX\UserGpuPreferences"; ValueType: string; ValueName: "{app}\{#MyAppExeName}"; ValueData: "GpuPreference=2;"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Microsoft\DirectX\UserGpuPreferences"; ValueType: string; ValueName: "{app}\JarvisDebug.exe"; ValueData: "GpuPreference=2;"; Flags: uninsdeletevalue
 Root: HKCU; Subkey: "Software\Microsoft\DirectX\UserGpuPreferences"; ValueType: string; ValueName: "{localappdata}\Programs\Ollama\ollama app.exe"; ValueData: "GpuPreference=2;"
 Root: HKCU; Subkey: "Software\Microsoft\DirectX\UserGpuPreferences"; ValueType: string; ValueName: "{localappdata}\Programs\Ollama\ollama.exe"; ValueData: "GpuPreference=2;"
 

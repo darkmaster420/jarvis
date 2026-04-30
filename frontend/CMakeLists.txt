@@ -69,46 +69,56 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(nlohmann_json)
 
 # ------------------------------------------------------------------
-# HUD target
+# HUD targets
 # ------------------------------------------------------------------
-option(JARVIS_CONSOLE "Build HUD as console app for logs" OFF)
+option(JARVIS_CONSOLE "Build main HUD as console app for logs" OFF)
 set(JARVIS_SOURCES
     src/main.cpp
     src/Hud.cpp
     src/WsClient.cpp
     src/BackendLauncher.cpp
 )
+# Shown in the HUD (bottom-right) and should match the Windows installer
+# (installer/jarvis.iss) when you cut a release. CACHE FORCE so a stale
+# JARVIS_HUD_VERSION from an older first configure cannot stick at e.g. 0.2.0.
+set(JARVIS_HUD_VERSION "0.2.48" CACHE STRING "HUD / release version label" FORCE)
+
+function(jarvis_hud_link_libs tgt)
+    target_compile_definitions(${tgt} PRIVATE
+        "JARVIS_HUD_VERSION_STR=\"${JARVIS_HUD_VERSION}\""
+    )
+    target_include_directories(${tgt} PRIVATE src)
+    target_link_libraries(${tgt} PRIVATE
+        imgui
+        ixwebsocket
+        nlohmann_json::nlohmann_json
+    )
+    if(WIN32)
+        target_link_libraries(${tgt} PRIVATE
+            d3d11 dxgi d3dcompiler
+            dwmapi user32 gdi32 imm32
+            ws2_32
+        )
+    endif()
+    if(MINGW)
+        target_link_options(${tgt} PRIVATE
+            -static-libgcc -static-libstdc++ -static
+        )
+    endif()
+endfunction()
+
 if(JARVIS_CONSOLE OR NOT WIN32)
     add_executable(jarvis_hud ${JARVIS_SOURCES})
 else()
     add_executable(jarvis_hud WIN32 ${JARVIS_SOURCES})
 endif()
 set_target_properties(jarvis_hud PROPERTIES OUTPUT_NAME "jarvis")
-# Shown in the HUD (bottom-right) and should match the Windows installer
-# (installer/jarvis.iss) when you cut a release. CACHE FORCE so a stale
-# JARVIS_HUD_VERSION from an older first configure cannot stick at e.g. 0.2.0.
-set(JARVIS_HUD_VERSION "0.2.24" CACHE STRING "HUD / release version label" FORCE)
-target_compile_definitions(jarvis_hud PRIVATE
-    "JARVIS_HUD_VERSION_STR=\"${JARVIS_HUD_VERSION}\""
-)
-target_include_directories(jarvis_hud PRIVATE src)
-target_link_libraries(jarvis_hud PRIVATE
-    imgui
-    ixwebsocket
-    nlohmann_json::nlohmann_json
-)
+jarvis_hud_link_libs(jarvis_hud)
 
-if(WIN32)
-    target_link_libraries(jarvis_hud PRIVATE
-        d3d11 dxgi d3dcompiler
-        dwmapi user32 gdi32 imm32
-        ws2_32
-    )
-endif()
-
-# MinGW: statically link C/C++ runtime so the exe is standalone
-if(MINGW)
-    target_link_options(jarvis_hud PRIVATE
-        -static-libgcc -static-libstdc++ -static
-    )
-endif()
+# Console + JARVIS_DEBUG_HUD: backend --log-level DEBUG, --dev-hud default on,
+# window title "Jarvis (Debug)". Always a console subsystem on Windows (unlike
+# the default WIN32 subsystem main HUD).
+add_executable(jarvis_debug_hud ${JARVIS_SOURCES})
+set_target_properties(jarvis_debug_hud PROPERTIES OUTPUT_NAME "jarvis-debug")
+target_compile_definitions(jarvis_debug_hud PRIVATE JARVIS_DEBUG_HUD)
+jarvis_hud_link_libs(jarvis_debug_hud)

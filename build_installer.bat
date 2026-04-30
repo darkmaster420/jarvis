@@ -5,8 +5,9 @@ REM Bump installer\jarvis.iss + frontend\CMakeLists.txt (JARVIS_HUD_VERSION) for
 setlocal
 cd /d "%~dp0"
 
-echo ==^> Stopping Jarvis HUD if running (unlocks jarvis.exe)...
+echo ==^> Stopping Jarvis HUD if running (unlocks jarvis.exe / jarvis-debug.exe)...
 taskkill /IM jarvis.exe /F 2>nul
+taskkill /IM jarvis-debug.exe /F 2>nul
 
 echo ==^> scripts\build_installer.ps1 (auto-retries packaging with -NoClean if dist is locked^)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\build_installer.ps1" %*

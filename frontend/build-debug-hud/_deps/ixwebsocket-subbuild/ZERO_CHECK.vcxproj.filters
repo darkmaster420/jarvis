@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Bertie\.vscode\code\Jarvis\frontend\build-debug-hud\_deps\ixwebsocket-subbuild\CMakeFiles\d008530ab0fa87d6a592a6a0e6f86d18\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{AF271BDD-C15A-3FB1-9B51-C7034DF4C8C9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

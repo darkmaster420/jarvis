@@ -17,7 +17,15 @@ $AppDir = Join-Path $DistRoot "Jarvis"
 $BackendStage = Join-Path $AppDir "backend"
 $InstallStage = Join-Path $AppDir "_install"
 $FrontendBuild = Join-Path $Root "frontend\build"
-$JarvisExe = Join-Path $FrontendBuild "jarvis.exe"
+
+function Resolve-FrontendExe {
+    param([string]$BuildRoot, [string]$Config, [string]$ExeName)
+    $p = Join-Path $BuildRoot $Config $ExeName
+    if (Test-Path $p) { return $p }
+    $p2 = Join-Path $BuildRoot $ExeName
+    if (Test-Path $p2) { return $p2 }
+    return $null
+}
 
 function Step {
     param([string]$Message)
@@ -104,12 +112,19 @@ if (-not $SkipFrontendBuild) {
     # Reconfigure every time: CMake cache (e.g. JARVIS_HUD_VERSION) must not stay stale.
     cmake -S (Join-Path $Root "frontend") -B $FrontendBuild
     if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
-    Get-Process jarvis -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process jarvis, jarvis-debug -ErrorAction SilentlyContinue | Stop-Process -Force
     cmake --build $FrontendBuild --config $Configuration
     if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
 }
-if (-not (Test-Path $JarvisExe)) { throw "Frontend exe not found: $JarvisExe" }
+$JarvisExe = Resolve-FrontendExe $FrontendBuild $Configuration "jarvis.exe"
+if (-not $JarvisExe) {
+    throw "Frontend exe not found under $FrontendBuild (tried $Configuration\jarvis.exe and jarvis.exe)."
+}
 Copy-Item -Force $JarvisExe (Join-Path $AppDir "Jarvis.exe")
+$JarvisDebugExe = Resolve-FrontendExe $FrontendBuild $Configuration "jarvis-debug.exe"
+if ($JarvisDebugExe) {
+    Copy-Item -Force $JarvisDebugExe (Join-Path $AppDir "JarvisDebug.exe")
+}
 
 Step "Staging backend and config"
 Copy-Tree (Join-Path $Root "backend\jarvis") (Join-Path $BackendStage "jarvis")
@@ -170,7 +185,9 @@ Step "Writing package README"
 Jarvis Windows package
 ======================
 
-Run Jarvis.exe to start the HUD and backend.
+Run Jarvis.exe to start the HUD and backend. Use JarvisDebug.exe for a
+console window plus backend --log-level DEBUG and hot-reload (--dev-hud)
+enabled by default.
 
 When installed under Program Files, the HUD window position is saved as
 %LocalAppData%\Jarvis\hud_layout.json (a copy from the old exe folder is used
