@@ -51,7 +51,6 @@ class ToolDispatcher:
             "open_url":   "open_url",
             "get_system_stats": "sys_stats",
             "run_terminal_command": "terminal_exec",
-            "open_games_folder": "open_games_folder"  # <-- New mapping
         }.get(name, name)
         if not self._authorised(intent, user):
             return self._restricted_denied
@@ -83,19 +82,6 @@ class ToolDispatcher:
                 timeout_s = 30
             cmd = (args.get("command") or ".").strip()
             return terminal_skill.run(cmd, timeout_s)
-        if name == "open_games_folder":
-            # Windows-specific: open the Games folder using shell
-            import os
-            import subprocess
-            try:
-                games_path = os.path.join(os.environ["USERPROFILE"], "Games")
-                if not os.path.exists(games_path):
-                    return SkillResult("Games folder does not exist.", intent="open_games_folder", success=False)
-                # Use shell to open the folder
-                subprocess.run(["explorer.exe", games_path])
-                return SkillResult("Opened Games folder.", intent="open_games_folder", success=True)
-            except Exception as e:
-                return SkillResult(f"Failed to open Games folder: {e}", intent="open_games_folder", success=False)
         if name in self._user_skills_ref:
             try:
                 return self._user_skills_ref[name](args)

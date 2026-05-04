@@ -160,6 +160,10 @@ class LlmCfg:
     openai_api_key: str = "lm-studio"
     # Optional max output tokens (chat + vision); None = server default.
     openai_max_tokens: int | None = None
+    # propose_patch / skill authoring: full-file outputs need a large ceiling or
+    # native tool JSON is truncated ("Unexpected end of content" in LM Studio).
+    authoring_max_tokens_core: int = 12000
+    authoring_max_tokens_skill: int = 6000
     model: str = "qwen2.5vl:7b"
     system_prompt: str = "You are Jarvis, a helpful assistant."
     # Use one multimodal model for both text/tools and vision by default; this
@@ -169,6 +173,11 @@ class LlmCfg:
     vision_fallback_models: list[str] = field(default_factory=lambda: ["gemma3:4b"])
     # Wider = easier for the VLM to read UI text (slightly slower to encode).
     vision_max_screenshot_w: int = 1024
+    # Webcam capture settings for one-shot camera vision.
+    vision_camera_index: int = 0
+    vision_camera_max_width: int = 960
+    # Live camera stream defaults (HUD preview foundation for recognition).
+    vision_live_fps: float = 5.0
     # One round = one screenshot + one model decision (usually one action).
     vision_desktop_rounds: int = 8
     # Let Windows repaint before the next capture (seconds).

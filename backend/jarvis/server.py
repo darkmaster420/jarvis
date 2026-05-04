@@ -29,6 +29,7 @@ from .user_skills import UserSkillManager
 from .vad import VoiceActivityDetector
 from .wakeword import WakeWord
 from .bootstrap import start_ollama_bootstrap_thread
+from .skills import desktop
 from .skills.system import prewarm_start_menu_cache
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,12 @@ _MD_FENCE_RE = re.compile(r"```(?:\w+)?\s*([\s\S]*?)```")
 _MD_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 _MD_EMPH_RE = re.compile(r"(?<!\w)(\*\*|__|\*|_|~~)(.+?)\1(?!\w)")
 _LINE_PREFIX_RE = re.compile(r"(?m)^\s{0,3}(?:[-*+]|\d+\.)\s+")
+_CAMERA_PROMPT_RE = re.compile(r"\b(camera|webcam|photo|snapshot|picture)\b", re.I)
+_SCREEN_PROMPT_RE = re.compile(r"\b(screen|window|display|desktop)\b", re.I)
+_COMMAND_PROMPT_RE = re.compile(
+    r"\b(open|start|launch|run|close|stop|restart|set|turn|mute|unmute|lock|shutdown)\b",
+    re.I,
+)
 
 
 def _clean_for_speech(text: str) -> str:
@@ -126,6 +133,8 @@ class JarvisServer:
         self._turn_progress_idx: dict[int, int] = {}
         # False after background ensure_ollama_models() returns (HUD can show Ollama status).
         self._ollama_bootstrap_pending = True
+        self._live_camera_task: asyncio.Task | None = None
+        self._live_camera_stream: desktop.LiveCameraStream | None = None
 
     async def broadcast(self, event: str, **data: Any) -> None:
         payload = {"event": event, **data}
@@ -152,6 +161,56 @@ class JarvisServer:
         self.state = s
         log.info("state -> %s", s.value)
         await self.broadcast("state", state=s.value)
+
+    async def _start_live_camera(self) -> tuple[bool, str]:
+        if self._live_camera_task is not None and not self._live_camera_task.done():
+            return True, "Live camera view is already running."
+        cam_idx = int(getattr(self.cfg.llm, "vision_camera_index", 0) or 0)
+        cam_w = int(getattr(self.cfg.llm, "vision_camera_max_width", 960) or 960)
+        fps = float(getattr(self.cfg.llm, "vision_live_fps", 5.0) or 5.0)
+        fps = max(1.0, min(15.0, fps))
+        stream = desktop.LiveCameraStream(camera_index=cam_idx, max_width=cam_w)
+        ok, msg = await asyncio.to_thread(stream.open)
+        if not ok:
+            return False, msg
+        self._live_camera_stream = stream
+
+        async def _loop() -> None:
+            interval = 1.0 / fps
+            try:
+                while True:
+                    if self._live_camera_stream is None:
+                        return
+                    try:
+                        b64 = await asyncio.to_thread(
+                            self._live_camera_stream.read_frame_b64
+                        )
+                        if b64:
+                            await self.broadcast(
+                                "camera_frame",
+                                image_b64=b64,
+                                mime="image/jpeg",
+                                live=True,
+                            )
+                    except Exception as e:
+                        log.warning("live camera frame failed: %s", e)
+                    await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                return
+
+        self._live_camera_task = asyncio.create_task(_loop())
+        await self.broadcast("camera_live", active=True, fps=fps)
+        return True, f"Live camera view started at about {int(round(fps))} FPS."
+
+    async def _stop_live_camera(self) -> tuple[bool, str]:
+        if self._live_camera_task is not None:
+            self._live_camera_task.cancel()
+            self._live_camera_task = None
+        if self._live_camera_stream is not None:
+            await asyncio.to_thread(self._live_camera_stream.close)
+            self._live_camera_stream = None
+        await self.broadcast("camera_live", active=False)
+        return True, "Live camera view stopped."
 
     def _settings_snapshot(self) -> dict:
         eleven = self.cfg.tts.elevenlabs
@@ -386,10 +445,15 @@ class JarvisServer:
                     else:
                         speak = (
                             f"Patch applied to {info['applied']}. "
-                            "Restart me to pick up core changes."
+                            "Core Python changes load only after a backend restart: "
+                            "type /restart in the HUD, or quit and launch Jarvis again."
                         )
-                    await self.broadcast("patch_applied", id=info["id"],
-                                         target=info["applied"])
+                    await self.broadcast(
+                        "patch_applied",
+                        id=info["id"],
+                        target=info["applied"],
+                        abs_path=info.get("abs_path") or "",
+                    )
                     patches = await asyncio.to_thread(self.patches.list_patches)
                     await self.broadcast("patches", items=patches)
                     await self._speak(speak)
@@ -457,46 +521,91 @@ class JarvisServer:
         if listen_after:
             await self._begin_listening()
 
-    def _arm_silence_nudge(self, turn_id: int, *, delay_s: float = 1.0) -> None:
+    def _nudge_lines_for_text(self, text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        t = (text or "").strip()
+        if _CAMERA_PROMPT_RE.search(t):
+            ack = (
+                "Okay, checking the camera now.",
+                "Understood, looking through the camera.",
+                "Alright, let me check what the camera sees.",
+            )
+            progress = (
+                "Still looking at the camera view.",
+                "Hang on, still checking the camera details.",
+                "Almost there, still processing the camera frame.",
+            )
+            return ack, progress
+        if _SCREEN_PROMPT_RE.search(t):
+            ack = (
+                "Okay, checking your screen.",
+                "Understood, looking at your screen now.",
+                "Alright, let me see what's on screen.",
+            )
+            progress = (
+                "Still checking your screen.",
+                "One sec, still going through what's on screen.",
+                "Still working through the screen details.",
+            )
+            return ack, progress
+        if _COMMAND_PROMPT_RE.search(t):
+            ack = (
+                "On it, running that now.",
+                "Yep, doing that now.",
+                "Alright, running it now.",
+            )
+            progress = (
+                "Still working on that.",
+                "One sec, that's still running.",
+                "Still on it, almost done.",
+            )
+            return ack, progress
+        ack = (
+            "On it.",
+            "Understood, working on it.",
+            "Alright, let me handle that.",
+        )
+        progress = (
+            "Still working on it.",
+            "One sec, still processing this.",
+            "Still on it, just taking a moment.",
+            "Almost there, wrapping this up.",
+            "Hang tight, still working through it.",
+            "Still going, checking the details.",
+            "Yup, still in progress.",
+            "Still on this, thanks for waiting.",
+            "Taking a bit longer, but I'm on it.",
+            "Still working through it carefully.",
+            "Haven't forgotten, still processing.",
+            "Still in progress, almost there.",
+        )
+        return ack, progress
+
+    def _arm_silence_nudge(
+        self,
+        turn_id: int,
+        *,
+        delay_s: float = 1.0,
+        source_text: str = "",
+    ) -> None:
         if self._silence_nudge_task is not None:
             self._silence_nudge_task.cancel()
             self._silence_nudge_task = None
         self._turn_last_progress_at[turn_id] = time.monotonic()
-        progress_lines = (
-            "Still working on it.",
-            "One sec, I am still processing this.",
-            "Thanks for waiting, I am checking that now.",
-            "Almost there, still working through it.",
-            "I am still on it, just taking a moment.",
-            "Working through the details now.",
-            "Thanks for your patience, continuing now.",
-            "I am still processing this request.",
-            "I am validating the result before I respond.",
-            "Still with you, finishing this up.",
-            "I am checking another approach now.",
-            "Taking a little longer than usual, still in progress.",
-            "I am still working through this carefully.",
-            "I have not forgotten, still processing.",
-            "I am verifying details before I answer.",
-            "Still in progress, thanks for hanging tight.",
-        )
-        ack_lines = (
-            "I will work on it.",
-            "Got it.",
-            "Sure, right on it.",
-            "Okay, I am on it.",
-        )
+        ack_lines, progress_lines = self._nudge_lines_for_text(source_text)
 
         async def _later() -> None:
             try:
                 await asyncio.sleep(max(0.1, delay_s))
                 if turn_id != self._turn_id or self.state != State.THINKING:
                     return
-                # First anti-silence line should be a simple acknowledgement.
-                self._turn_progress_announced.add(turn_id)
-                self._turn_last_progress_at[turn_id] = time.monotonic()
-                ack = ack_lines[turn_id % len(ack_lines)]
-                await self._think_speak(turn_id, ack)
+                # If another status line already spoke (e.g. "Oops, that did not
+                # work. Let me try fixing it."), treat that as first anti-silence
+                # narration and skip the default acknowledgement.
+                if turn_id not in self._turn_progress_announced:
+                    self._turn_progress_announced.add(turn_id)
+                    self._turn_last_progress_at[turn_id] = time.monotonic()
+                    ack = ack_lines[turn_id % len(ack_lines)]
+                    await self._think_speak(turn_id, ack)
                 # Keep speaking periodic progress while we're still thinking.
                 while True:
                     if turn_id != self._turn_id:
@@ -585,7 +694,7 @@ class JarvisServer:
 
             self.loop.call_soon_threadsafe(_schedule)
 
-        self._arm_silence_nudge(turn_id, delay_s=1.0)
+        self._arm_silence_nudge(turn_id, delay_s=1.0, source_text=text)
         result = await asyncio.to_thread(
             self.orch.handle, text, user, on_status
         )
@@ -596,6 +705,21 @@ class JarvisServer:
             log.info("discarding LLM result from interrupted turn")
             return
         clean_reply = _clean_for_speech(result.reply)
+        if result.intent == "start_live_vision":
+            ok, msg = await self._start_live_camera()
+            clean_reply = msg
+            result.success = ok
+        elif result.intent == "stop_live_vision":
+            _ok, msg = await self._stop_live_camera()
+            clean_reply = msg
+        if isinstance(result.data, dict):
+            b64 = str(result.data.get("camera_frame_b64") or "").strip()
+            if b64:
+                await self.broadcast(
+                    "camera_frame",
+                    image_b64=b64,
+                    mime=str(result.data.get("camera_mime") or "image/jpeg"),
+                )
         await self.broadcast("reply", text=clean_reply, intent=result.intent,
                              success=result.success)
         if result.intent == "propose_patch":
@@ -634,7 +758,7 @@ class JarvisServer:
 
             self.loop.call_soon_threadsafe(_schedule)
 
-        self._arm_silence_nudge(turn_id, delay_s=1.0)
+        self._arm_silence_nudge(turn_id, delay_s=1.0, source_text=text)
         result = await asyncio.to_thread(self.orch.handle, text, user, on_status)
         if self._silence_nudge_task is not None:
             self._silence_nudge_task.cancel()
@@ -643,6 +767,21 @@ class JarvisServer:
             log.info("discarding text prompt result from interrupted turn")
             return
         clean_reply = _clean_for_speech(result.reply)
+        if result.intent == "start_live_vision":
+            ok, msg = await self._start_live_camera()
+            clean_reply = msg
+            result.success = ok
+        elif result.intent == "stop_live_vision":
+            _ok, msg = await self._stop_live_camera()
+            clean_reply = msg
+        if isinstance(result.data, dict):
+            b64 = str(result.data.get("camera_frame_b64") or "").strip()
+            if b64:
+                await self.broadcast(
+                    "camera_frame",
+                    image_b64=b64,
+                    mime=str(result.data.get("camera_mime") or "image/jpeg"),
+                )
         await self.broadcast("reply", text=clean_reply, intent=result.intent,
                              success=result.success)
         if result.intent == "propose_patch":
@@ -759,6 +898,7 @@ class JarvisServer:
             try:
                 await asyncio.Future()
             finally:
+                await self._stop_live_camera()
                 audio_task.cancel()
                 broadcaster.cancel()
                 self.tts.stop()

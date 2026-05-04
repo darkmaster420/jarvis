@@ -147,6 +147,7 @@ permissions:
 - **Apps:** "open Firefox", "launch notepad"
 - **Web:** "search for cheesecake recipe", "open github.com"
 - **System:** "lock the PC", "go to sleep", "shut down", "cancel shutdown"
+- **Vision:** "what's on my screen?", "what do you see on my camera?", "start live vision", "stop live vision" (HUD shows camera frame preview; live mode streams at configured FPS)
 - **Chat:** anything not matched above goes to Ollama as a free-form query
 
 ## 6. WebSocket protocol

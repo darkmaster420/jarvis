@@ -59,18 +59,24 @@ tts:
 llm:
   provider: "lm_studio"
   host: "http://127.0.0.1:11434"
-  openai_base_url: "http://127.0.0.1:1234/v1"
+  openai_base_url: "http://192.168.0.31:1234/v1"
   openai_api_key: "lm-studio"
-  # Set to the exact id shown in LM Studio for your loaded model (may differ from below).
-  model: "google/gemma-4-e4b"
-  vision_model: "google/gemma-4-e4b"
+  # Must match GET /v1/models on http://192.168.0.31:1234/v1
+  model: "qwen/qwen3.6-35b-a3b"
+  vision_model: "qwen/qwen3.6-35b-a3b"
   vision_fallback_models: []
   # Wider screenshot helps the VLM find text and buttons (a bit more VRAM/time).
   vision_max_screenshot_w: 1024
+  # Webcam settings for one-shot camera vision prompts.
+  vision_camera_index: 0
+  vision_camera_max_width: 960
+  vision_live_fps: 5.0
   # More steps = can scroll to find off-screen items; each step calls the VLM once.
   vision_desktop_rounds: 8
   vision_post_action_s: 0.18
   vision_num_predict: 384
+  authoring_max_tokens_core: 12000
+  authoring_max_tokens_skill: 6000
   system_prompt: |
     You are Jarvis, a concise, helpful personal assistant for a PC user.
     Keep replies short (1-3 sentences) unless asked to elaborate.

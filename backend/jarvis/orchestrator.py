@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 from .config import LlmCfg, PermissionsCfg
 from .memory import Memory
+from .patches import PatchError
 from .prompt_builder import PromptBuilder
 from .skills import desktop, media, system, web
 from .skills import info as info_skill
@@ -479,14 +480,15 @@ TOOLS_SPEC = [
         "function": {
             "name": "propose_patch",
             "description": (
-                "Propose replacing a whole file. You MUST send the FULL new "
-                "file text (not a diff). The HUD reviews it; it applies only "
-                "after approval. "
+                "Propose replacing a whole file. You MUST send the FULL merged "
+                "file text (not a diff): copy the current file verbatim, apply the "
+                "smallest change, never replace a large backend module with a short "
+                "stub. The HUD reviews it; it applies only after approval. "
                 "Use ``user_skills/skills.py`` for custom tools (SKILLS dict + "
                 "handle_<name> per tool; follow USER SKILL BUNDLE guide in "
                 "instructions; hot-reloads). "
-                "Use ``backend/jarvis/...`` only for core fixes (restart Jarvis "
-                "after approval)."
+                "Use ``backend/jarvis/...`` for core fixes (restart Jarvis after "
+                "approval); preserve all unrelated symbols and imports."
             ),
             "parameters": {
                 "type": "object",
@@ -511,7 +513,10 @@ TOOLS_SPEC = [
                     "new_content": {
                         "type": "string",
                         "description": (
-                            "Complete new file contents, byte-ready. For "
+                            "Complete merged file contents, byte-ready. For core "
+                            "Python: start from the existing file on disk and edit "
+                            "in place — line count should stay in the same ballpark "
+                            "as before unless you are adding a large feature. For "
                             "user_skills/skills.py: entire bundle (module docstring, "
                             "SKILLS, all handle_* functions) per USER SKILL BUNDLE "
                             "guide — never truncate or omit unrelated tools."
@@ -638,6 +643,19 @@ _DESKTOP_VISION_PAT = re.compile(
     re.I,
 )
 
+_CAMERA_VISION_PAT = re.compile(
+    r"\b("
+    r"camera|webcam|"
+    r"what do you see|"
+    r"what can you see|"
+    r"what do you see (on|from) (the|my) camera|"
+    r"look through (the|my) camera|"
+    r"describe (the|my) camera view|"
+    r"take (a|the)?\s*(camera|webcam) (photo|snapshot|picture)"
+    r")\b",
+    re.I,
+)
+
 _CREATE_SKILL_PAT = re.compile(
     r"(?:"
     # make/create/... a (new) (jarvis) skill | custom tool
@@ -716,6 +734,36 @@ _DOCKER_ACTION_PAT = re.compile(
     re.I,
 )
 
+_FOLDER_ACTION_PAT = re.compile(
+    r"\b(?:open|start|launch|show)\b.{0,80}\b(?:downloads|documents|pictures|desktop)\b.{0,20}\bfolder\b"
+    r"|"
+    r"\b(?:open|start|launch|show)\b.{0,40}\bfolder\b",
+    re.I,
+)
+
+_DOCKER_DESKTOP_LAUNCH_PAT = re.compile(
+    r"\b(?:open|start|launch|run)\b.{0,40}\bdocker(?:\s+desktop)?\b"
+    r"|"
+    r"\bdocker(?:\s+desktop)?\b.{0,40}\b(?:open|start|launch|run)\b",
+    re.I,
+)
+
+_FORCE_SELF_IMPROVE_PAT = re.compile(
+    r"\b("
+    r"self-?improve|"
+    r"improve yourself|improve itself|"
+    r"test(?:ing)?\s+self-?improvement|"
+    r"make (?:it|this|that) (?:a )?patch|"
+    r"as (?:a )?patch|"
+    r"patch (?:it|this|that)|"
+    r"patch yourself|"
+    r"propose[_\s-]?patch|"
+    r"make (?:a )?core (?:patch|edit)|"
+    r"core(?:\s+mode)?\s+edit"
+    r")\b",
+    re.I,
+)
+
 
 def _wants_desktop_vision(text: str) -> bool:
     t = (text or "").strip()
@@ -724,12 +772,31 @@ def _wants_desktop_vision(text: str) -> bool:
     return bool(_DESKTOP_VISION_PAT.search(t))
 
 
+def _wants_camera_vision(text: str) -> bool:
+    t = (text or "").strip()
+    if len(t) < 4:
+        return False
+    if "screen" in t.lower():
+        return False
+    return bool(_CAMERA_VISION_PAT.search(t))
+
+
 def _wants_user_skill(text: str) -> bool:
     return bool(_CREATE_SKILL_PAT.search(text or ""))
 
 
 def _wants_core_capability(text: str) -> bool:
     t = text or ""
+    if _FORCE_SELF_IMPROVE_PAT.search(t):
+        return True
+    # "start/open docker desktop" is a direct runtime app-launch command,
+    # not a self-improve core-authoring request.
+    if _DOCKER_DESKTOP_LAUNCH_PAT.search(t):
+        return False
+    # Folder-open requests should run runtime-first via open_known_folder.
+    # Self-improve remains available through explicit force phrases.
+    if _FOLDER_ACTION_PAT.search(t):
+        return False
     # Core overrides user-skill wording when the request requires external app /
     # shell orchestration that the user-skills sandbox cannot perform.
     # For Docker/container lifecycle asks, force core authoring so Jarvis
@@ -826,6 +893,12 @@ def _core_patch_file_hint(text: str) -> str:
             "backend/jarvis/skills/system.py (behavior) and "
             "backend/jarvis/tool_dispatcher.py (wiring)."
         )
+    if re.search(r"\bfolder\b|\bgames?\b", t, re.I):
+        return (
+            " For folder routing, prefer a minimal edit to "
+            "backend/jarvis/skills/system.py (e.g. extend open_known_folder); "
+            "do not replace the whole module with a new open_app stub."
+        )
     return ""
 
 
@@ -835,7 +908,8 @@ def _core_authoring_prompt_nudge(pname: str, attempt: int, text: str = "") -> st
         "\n\n[CORE EXTENSION — For this request, do not call normal runtime tools. "
         "Return only propose_patch for backend/jarvis/*.py so Jarvis gains a new "
         "built-in capability. Target an existing backend file (do not invent "
-        f"paths).{hint} You used {pname!r}.]"
+        "paths). Merge into the current file: full merged new_content, not a "
+        f"short rewrite.{hint} You used {pname!r}.]"
     )
     if attempt >= 2:
         msg += (
@@ -1156,6 +1230,47 @@ class Orchestrator:
                 r"(?i)\bstart\s+docker\s+(?:mongo|mongodb)\b"
             ),
              lambda m, u: system.start_mongodb_container(), "start_mongodb_container"),
+            (re.compile(
+                r"(?i)\b(?:open|start|launch|run)\s+(?:the\s+)?docker(?:\s+desktop)?\b"
+            ),
+             lambda m, u: system.open_app("docker desktop"), "open_app"),
+            (re.compile(
+                r"(?i)\b(?:open|start|launch|show)\s+"
+                r"(?:(?:the|my)\s+)?(?P<folder>[a-z0-9 _-]{1,40}?)\s+folder\b"
+            ),
+             lambda m, u: system.open_known_folder(m.group("folder").strip()),
+             "open_folder"),
+            (re.compile(
+                r"(?i)^(?:please\s+)?(?:open|start|launch|run)\s+"
+                r"(?:(?:the|my)\s+)?"
+                r"(?P<app>(?!docker(?:\s+desktop)?\b)"
+                r"(?!live\s+(?:camera|vision)\b)"
+                r"(?![a-z0-9 _-]{1,40}\s+folder\b)"
+                r".+?)"
+                r"\s*(?:app|application|program)?\s*$"
+            ),
+             lambda m, u: system.open_app(m.group("app").strip()),
+             "open_app"),
+            (re.compile(
+                r"(?i)\b(?:start|enable|turn on|begin)\s+"
+                r"(?:live\s+)?(?:camera|vision|camera\s+vision)\b"
+            ),
+             lambda m, u: SkillResult(
+                 "Starting live camera view.",
+                 intent="start_live_vision",
+                 success=True,
+             ),
+             "camera"),
+            (re.compile(
+                r"(?i)\b(?:stop|disable|turn off|end)\s+"
+                r"(?:live\s+)?(?:camera|vision|camera\s+vision)\b"
+            ),
+             lambda m, u: SkillResult(
+                 "Stopping live camera view.",
+                 intent="stop_live_vision",
+                 success=True,
+             ),
+             "camera"),
 
             (re.compile(r"\b(mute)\b"),
              lambda m, u: system.volume("mute"), "volume"),
@@ -1235,6 +1350,30 @@ class Orchestrator:
                 f"(default {self.llm_cfg.openai_base_url})."
             )
         return "I couldn't reach the language model. Is Ollama running?"
+
+    def _friendly_lm_error_msg(self, err: Exception) -> str:
+        raw = str(err or "").strip()
+        low = raw.lower()
+        if self._llm_provider == "lm_studio":
+            if "requested" in low and "context size" in low and "tokens" in low:
+                return (
+                    "LM Studio rejected this request because it exceeded the model context window. "
+                    "Increase context length in LM Studio or reduce prompt/context size."
+                )
+            if "does not exist" in low or ("model" in low and "not found" in low):
+                return (
+                    "LM Studio could not find the configured model id. "
+                    "Use the exact id from GET /v1/models in config/state."
+                )
+            if "400" in low:
+                return "LM Studio rejected the request (HTTP 400). Check model id and context/token limits."
+            if "401" in low or "403" in low:
+                return "LM Studio authorization failed. Verify API key and local server settings."
+            if "404" in low:
+                return "LM Studio endpoint not found. Verify llm.openai_base_url includes /v1."
+            if "429" in low:
+                return "LM Studio rate-limited this request. Try again shortly."
+        return self._lm_unreachable_msg()
 
     def _lm_native_chat(
         self,
@@ -1475,6 +1614,86 @@ class Orchestrator:
             intent="desktop", success=False,
         )
 
+    def _run_camera_vision(self, text: str, user: str) -> SkillResult:
+        """One-shot camera caption: capture webcam frame, then ask VLM to describe it."""
+        if not self._llm_ready():
+            return SkillResult(
+                self._lm_unreachable_msg(),
+                intent="camera",
+                success=False,
+            )
+        primary_vm = (getattr(self.llm_cfg, "vision_model", None) or "").strip()
+        if not primary_vm:
+            if self._llm_provider == "lm_studio":
+                hint = (
+                    "Camera vision is off: set `llm.vision_model` in config to a "
+                    "VLM id exactly as listed by LM Studio (GET /v1/models)."
+                )
+            else:
+                hint = (
+                    "Camera vision is off: set `llm.vision_model` in config "
+                    "to a vision model, e.g. qwen2.5vl:7b."
+                )
+            return SkillResult(hint, intent="camera", success=False)
+
+        cam_idx = int(getattr(self.llm_cfg, "vision_camera_index", 0) or 0)
+        cam_max_w = int(getattr(self.llm_cfg, "vision_camera_max_width", 960) or 960)
+        cap = desktop.capture_camera_frame(camera_index=cam_idx, max_width=cam_max_w)
+        if not cap.success or not (cap.reply or "").strip():
+            return SkillResult(
+                cap.reply or "Could not capture a camera frame.",
+                intent="camera",
+                success=False,
+            )
+        b64 = (cap.reply or "").strip()
+
+        sys_vision = (
+            "You are a concise vision assistant. You are given one webcam image from the "
+            "user's PC. Describe what is visible in plain, natural language. "
+            "If uncertain, say what is unclear. Keep it to 1-3 short sentences and "
+            "do not use markdown."
+        )
+        user_msg = (
+            f"User request: {text}\n"
+            "Describe what you can see from the camera image."
+        )
+        messages = [
+            {"role": "system", "content": sys_vision},
+            {"role": "user", "content": user_msg, "images": [b64]},
+        ]
+        n_pred = int(getattr(self.llm_cfg, "vision_num_predict", 384) or 384)
+        try:
+            if self._llm_provider == "lm_studio":
+                from .openai_compat import chat_completions, ollama_messages_to_openai
+
+                resp = chat_completions(
+                    self.llm_cfg.openai_base_url,
+                    self.llm_cfg.openai_api_key,
+                    primary_vm,
+                    ollama_messages_to_openai(messages),
+                    tools=None,
+                    temperature=0.0,
+                    max_tokens=max(64, n_pred),
+                )
+            else:
+                resp = self._ollama.chat(
+                    model=primary_vm,
+                    messages=messages,
+                    options={"temperature": 0.0, "num_predict": max(64, n_pred)},
+                )
+        except Exception as e:
+            return SkillResult(f"Camera vision error: {e}", intent="camera", success=False)
+
+        reply = _extract_content(resp).strip() or "I could not confidently describe the camera image."
+        self._history.append(("user", text))
+        self._history.append(("assistant", reply))
+        return SkillResult(
+            reply,
+            intent="camera",
+            success=True,
+            data={"camera_frame_b64": b64, "camera_mime": "image/jpeg"},
+        )
+
     def handle(
         self,
         text: str,
@@ -1502,6 +1721,10 @@ class Orchestrator:
         if m_url and not self._authorised("open_url", user):
             log.info("denied intent=open_url (raw url) for user=%s", user)
             return RESTRICTED_DENIED
+        # Explicit self-improvement test phrasing should bypass runtime shortcuts
+        # and route directly into core authoring / propose_patch flow.
+        if _FORCE_SELF_IMPROVE_PAT.search(text):
+            return self._chat(text, user, on_status=on_status)
         # Prefer a strong custom-skill match before built-in regex rules so
         # user-authored capabilities (e.g. storage checks) are not shadowed by
         # generic built-ins.
@@ -1519,10 +1742,20 @@ class Orchestrator:
                     return RESTRICTED_DENIED
                 try:
                     result = fn(m, user)
-                    if (
+                    should_escalate = (
                         not result.success
                         and _wants_core_capability(text)
+                    )
+                    # Self-improve folder capability automatically when the
+                    # built-in folder map does not know a requested folder.
+                    if (
+                        not should_escalate
+                        and intent == "open_folder"
+                        and not result.success
+                        and "built-in mapping" in (result.reply or "").lower()
                     ):
+                        should_escalate = True
+                    if should_escalate:
                         log.info(
                             "runtime core capability failed (%s); escalating to core patch authoring",
                             intent,
@@ -1563,9 +1796,80 @@ class Orchestrator:
                 log.info("denied intent=desktop for user=%s", user)
                 return RESTRICTED_DENIED
             return self._run_desktop_vision(text, user)
+        if _wants_camera_vision(text):
+            if not self._authorised("camera", user):
+                log.info("denied intent=camera for user=%s", user)
+                return RESTRICTED_DENIED
+            return self._run_camera_vision(text, user)
         return self._chat(text, user, on_status=on_status)
 
     def _run_tool(self, name: str, args: dict, user: str) -> SkillResult:
+        """Execute one LLM tool call.
+
+        Authoring tools live here — ``ToolDispatcher`` only covers runtime OS/web skills.
+        """
+        if name == "propose_patch":
+            if not self._authorised("propose_patch", user):
+                return RESTRICTED_DENIED
+            if self.patches is None:
+                return SkillResult(
+                    "Patch proposals are not available.",
+                    intent="propose_patch",
+                    success=False,
+                )
+            target = (args.get("target") or "").strip()
+            description = (args.get("description") or "").strip()
+            nc_raw = args.get("new_content")
+            new_content = nc_raw if isinstance(nc_raw, str) else str(nc_raw or "")
+            try:
+                meta = self.patches.propose(target, description, new_content)
+                pid = str(meta.get("id") or "")
+                short = pid[:8] if len(pid) >= 8 else pid
+                return SkillResult(
+                    "I proposed a patch "
+                    + (f"({short}). " if short else "")
+                    + "Open the patches panel (F3) to review and approve.",
+                    intent="propose_patch",
+                    success=True,
+                )
+            except PatchError as e:
+                return SkillResult(str(e), intent="propose_patch", success=False)
+            except Exception as e:
+                log.exception("propose_patch failed")
+                return SkillResult(
+                    f"Patch proposal failed: {e}",
+                    intent="propose_patch",
+                    success=False,
+                )
+
+        if name == "create_user_skill":
+            if not self._authorised("create_user_skill", user):
+                return RESTRICTED_DENIED
+            if self.user_skills_mgr is None:
+                return SkillResult(
+                    "User skills are not available.",
+                    intent="create_user_skill",
+                    success=False,
+                )
+            code_raw = args.get("code")
+            code = code_raw if isinstance(code_raw, str) else str(code_raw or "")
+            return self.user_skills_mgr.create(
+                (args.get("name") or "").strip(),
+                (args.get("description") or "").strip(),
+                code,
+            )
+
+        if name == "remove_user_skill":
+            if not self._authorised("remove_user_skill", user):
+                return RESTRICTED_DENIED
+            if self.user_skills_mgr is None:
+                return SkillResult(
+                    "User skills are not available.",
+                    intent="remove_user_skill",
+                    success=False,
+                )
+            return self.user_skills_mgr.remove((args.get("name") or "").strip())
+
         return self._tool_dispatcher.run_tool(name, args, user)
 
     def _skills_bundle_location_hint(self) -> str:
@@ -1655,11 +1959,13 @@ class Orchestrator:
                 text,
             )
             skill_boost = False
+        core_cap = int(getattr(self.llm_cfg, "authoring_max_tokens_core", 12000) or 12000)
+        skill_cap = int(getattr(self.llm_cfg, "authoring_max_tokens_skill", 6000) or 6000)
         authoring_max_tokens: int | None = None
         if core_boost:
-            authoring_max_tokens = 2200
+            authoring_max_tokens = max(4096, core_cap)
         elif skill_boost:
-            authoring_max_tokens = 1400
+            authoring_max_tokens = max(2048, skill_cap)
         native_attempts = 4 if (skill_boost or core_boost) else 2
         prompt_attempts = 4 if (skill_boost or core_boost) else 2
 
@@ -1736,8 +2042,9 @@ class Orchestrator:
                         break
                     log.warning("llm chat failed: %s", e)
                     return SkillResult(
-                        self._lm_unreachable_msg(),
-                        intent="chat", success=False,
+                        self._friendly_lm_error_msg(e),
+                        intent="chat",
+                        success=False,
                     )
                 self._tool_support[model] = True
                 tool_calls = _extract_tool_calls(resp)
@@ -1952,8 +2259,9 @@ class Orchestrator:
                 pass
             log.warning("llm chat fallback failed: %s", e)
             return SkillResult(
-                self._lm_unreachable_msg(),
-                intent="chat", success=False,
+                self._friendly_lm_error_msg(e),
+                intent="chat",
+                success=False,
             )
 
     def _repair_failed_patch_once(
@@ -1993,7 +2301,9 @@ class Orchestrator:
                 ),
                 tools=repair_tools,
                 temperature=0.2,
-                max_tokens=2200,
+                max_tokens=max(4096, int(
+                    getattr(self.llm_cfg, "authoring_max_tokens_core", 12000) or 12000
+                )),
                 cancel_event=self._cancel_event,
             )
         except Exception as e:

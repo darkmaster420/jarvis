@@ -36,6 +36,7 @@ struct SharedState {
     std::string last_reply;
     std::string last_user;
     std::string status_line;
+    std::string last_camera_frame_b64;
 
     struct ElevenVoice {
         std::string id;
@@ -96,6 +97,7 @@ struct SharedState {
         last_user       = std::move(user);
         // New user turn started: drop stale assistant output immediately.
         last_reply.clear();
+        last_camera_frame_b64.clear();
     }
     void setReply(std::string t) {
         std::lock_guard<std::mutex> lk(text_mutex);
@@ -106,10 +108,15 @@ struct SharedState {
         last_transcript.clear();
         last_reply.clear();
         status_line.clear();
+        last_camera_frame_b64.clear();
     }
     void setStatus(std::string t) {
         std::lock_guard<std::mutex> lk(text_mutex);
         status_line = std::move(t);
+    }
+    void setCameraFrame(std::string b64) {
+        std::lock_guard<std::mutex> lk(text_mutex);
+        last_camera_frame_b64 = std::move(b64);
     }
 };
 

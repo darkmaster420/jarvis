@@ -10,6 +10,7 @@
 #include <d3d11.h>
 #include <dwmapi.h>
 #include <dxgi.h>
+#include <wincodec.h>
 
 // MinGW / older SDK: 32-bit builds often expose GWL_EXSTYLE only; MSVC maps
 // GetWindowLongPtr -> GetWindowLong there, but GWLP_EXSTYLE may be missing.
@@ -233,6 +234,32 @@ static std::string humanizeLogLine(const std::string& line) {
     return line;
 }
 
+static std::vector<unsigned char> decodeBase64(const std::string& in) {
+    static int T[256];
+    static bool init = false;
+    if (!init) {
+        for (int i = 0; i < 256; ++i) T[i] = -1;
+        const char* alpha =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        for (int i = 0; alpha[i]; ++i) T[(unsigned char)alpha[i]] = i;
+        init = true;
+    }
+    std::vector<unsigned char> out;
+    out.reserve((in.size() * 3) / 4);
+    int val = 0, valb = -8;
+    for (unsigned char c : in) {
+        if (c == '=') break;
+        if (c > 255 || T[c] == -1) continue;
+        val = (val << 6) + T[c];
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back((unsigned char)((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
+
 /** Corner brackets, tick marks, horizontal scan line — under widgets. */
 static void drawCyberpunkScaffold(ImDrawList* dl, const ImVec2& p0, const ImVec2& p1,
                                  float r, double now_sec) {
@@ -437,6 +464,7 @@ void Hud::restoreOverlayWindowStyles(HWND hwnd) {
 }
 
 bool Hud::init() {
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     hinst_ = GetModuleHandleW(nullptr);
 
     WNDCLASSEXW wc{};
@@ -624,6 +652,96 @@ void Hud::createRenderTarget() {
 
 void Hud::cleanupRenderTarget() {
     if (rtv_) { rtv_->Release(); rtv_ = nullptr; }
+}
+
+void Hud::clearCameraTexture() {
+    if (camera_srv_) {
+        camera_srv_->Release();
+        camera_srv_ = nullptr;
+    }
+    camera_w_ = 0;
+    camera_h_ = 0;
+}
+
+void Hud::syncCameraTextureFromState() {
+    std::string b64;
+    {
+        std::lock_guard<std::mutex> lk(state_.text_mutex);
+        b64 = state_.last_camera_frame_b64;
+    }
+    if (b64 == camera_b64_seen_) return;
+    camera_b64_seen_ = b64;
+    clearCameraTexture();
+    if (b64.empty() || !device_) return;
+
+    std::vector<unsigned char> bytes = decodeBase64(b64);
+    if (bytes.empty()) return;
+
+    IWICImagingFactory* factory = nullptr;
+    IWICStream* stream = nullptr;
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* conv = nullptr;
+    UINT w = 0, h = 0;
+    std::vector<unsigned char> rgba;
+    D3D11_TEXTURE2D_DESC td{};
+    D3D11_SUBRESOURCE_DATA init{};
+    ID3D11Texture2D* tex = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&factory));
+    if (FAILED(hr) || !factory) goto cleanup_cam;
+
+    hr = factory->CreateStream(&stream);
+    if (FAILED(hr) || !stream) goto cleanup_cam;
+    hr = stream->InitializeFromMemory(bytes.data(), (DWORD)bytes.size());
+    if (FAILED(hr)) goto cleanup_cam;
+    hr = factory->CreateDecoderFromStream(
+        stream, nullptr, WICDecodeMetadataCacheOnLoad, &decoder);
+    if (FAILED(hr) || !decoder) goto cleanup_cam;
+    hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr) || !frame) goto cleanup_cam;
+    hr = factory->CreateFormatConverter(&conv);
+    if (FAILED(hr) || !conv) goto cleanup_cam;
+    hr = conv->Initialize(
+        frame,
+        GUID_WICPixelFormat32bppBGRA,
+        WICBitmapDitherTypeNone,
+        nullptr,
+        0.0,
+        WICBitmapPaletteTypeCustom);
+    if (FAILED(hr)) goto cleanup_cam;
+
+    conv->GetSize(&w, &h);
+    if (w == 0 || h == 0) goto cleanup_cam;
+    rgba.resize((size_t)w * (size_t)h * 4u);
+    hr = conv->CopyPixels(nullptr, w * 4, (UINT)rgba.size(), rgba.data());
+    if (FAILED(hr)) goto cleanup_cam;
+
+    td.Width = w;
+    td.Height = h;
+    td.MipLevels = 1;
+    td.ArraySize = 1;
+    td.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    td.SampleDesc.Count = 1;
+    td.Usage = D3D11_USAGE_DEFAULT;
+    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    init.pSysMem = rgba.data();
+    init.SysMemPitch = w * 4;
+    hr = device_->CreateTexture2D(&td, &init, &tex);
+    if (FAILED(hr) || !tex) goto cleanup_cam;
+    hr = device_->CreateShaderResourceView(tex, nullptr, &camera_srv_);
+    tex->Release();
+    if (FAILED(hr) || !camera_srv_) goto cleanup_cam;
+    camera_w_ = (int)w;
+    camera_h_ = (int)h;
+
+cleanup_cam:
+    if (conv) conv->Release();
+    if (frame) frame->Release();
+    if (decoder) decoder->Release();
+    if (stream) stream->Release();
+    if (factory) factory->Release();
 }
 
 void Hud::run() {
@@ -1002,6 +1120,7 @@ void Hud::drawOrb() {
 }
 
 void Hud::drawTextPanel() {
+    syncCameraTextureFromState();
     std::string status, user, transcript, reply;
     {
         std::lock_guard<std::mutex> lk(state_.text_mutex);
@@ -1081,6 +1200,19 @@ void Hud::drawTextPanel() {
             ImGui::PushTextWrapPos(kWinW - 24);
             ImGui::TextColored(ImVec4(0.75f, 0.98f, 0.88f, 0.9f), "%s", reply.c_str());
             ImGui::PopTextWrapPos();
+        }
+        if (camera_srv_ && camera_w_ > 0 && camera_h_ > 0) {
+            ImGui::Dummy(ImVec2(0, 6));
+            ImGui::TextColored(ImVec4(0.80f, 0.90f, 1.0f, 0.85f), "CAMERA ::");
+            float avail_w = ImGui::GetContentRegionAvail().x - 12.0f;
+            if (avail_w < 80.0f) avail_w = 80.0f;
+            float img_w = std::min(340.0f, avail_w);
+            float img_h = img_w * (float)camera_h_ / (float)camera_w_;
+            if (img_h > 210.0f) {
+                img_h = 210.0f;
+                img_w = img_h * (float)camera_w_ / (float)camera_h_;
+            }
+            ImGui::Image((ImTextureID)camera_srv_, ImVec2(img_w, img_h));
         }
         if (!status.empty()) {
             ImGui::Dummy(ImVec2(0, 4));
@@ -1669,6 +1801,7 @@ void Hud::drawVersionCorner() {
 
 void Hud::shutdown() {
     if (!hwnd_) return;
+    clearCameraTexture();
     if (!layout_path_.empty()) {
         saveWindowLayout(hwnd_, fs::path(layout_path_));
     }
@@ -1679,6 +1812,7 @@ void Hud::shutdown() {
     DestroyWindow(hwnd_);
     UnregisterClassW(kClassName, hinst_);
     hwnd_ = nullptr;
+    CoUninitialize();
 }
 
 } // namespace jarvis

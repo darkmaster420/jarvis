@@ -61,18 +61,27 @@ llm:
   # lm_studio = OpenAI-compatible API (LM Studio :1234/v1). ollama = llm.host
   provider: "lm_studio"
   host: "http://127.0.0.1:11434"
-  openai_base_url: "http://127.0.0.1:1234/v1"
+  # Remote GPU PC: LM Studio must bind to the LAN (not only 127.0.0.1) and allow your LAN.
+  openai_base_url: "http://192.168.0.31:1234/v1"
   openai_api_key: "lm-studio"
-  # Exact id from LM Studio (Local Server / GET /v1/models). For Ollama use provider: ollama.
-  model: "qwen2.5-vl-7b-instruct"
-  vision_model: "qwen2.5-vl-7b-instruct"
+  # Exact id from GET /v1/models on that server (LM Studio model list).
+  model: "qwen/qwen3.6-35b-a3b"
+  # Same endpoint is used for vision; use a multimodal model on the server if you use camera/desktop vision.
+  vision_model: "qwen/qwen3.6-35b-a3b"
   vision_fallback_models: []
   # Wider screenshot helps the VLM find text and buttons (a bit more VRAM/time).
   vision_max_screenshot_w: 1024
+  # Webcam settings for one-shot camera vision prompts.
+  vision_camera_index: 0
+  vision_camera_max_width: 960
+  vision_live_fps: 5.0
   # More steps = can scroll to find off-screen items; each step calls the VLM once.
   vision_desktop_rounds: 8
   vision_post_action_s: 0.18
   vision_num_predict: 384
+  # Full-file propose_patch needs a large output budget or LM Studio truncates tool JSON.
+  authoring_max_tokens_core: 12000
+  authoring_max_tokens_skill: 6000
   system_prompt: |
     You are Jarvis, a concise, helpful personal assistant for a PC user.
     Keep replies short (1-3 sentences) unless asked to elaborate.

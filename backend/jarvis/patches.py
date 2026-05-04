@@ -31,15 +31,24 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 # Relative paths (vs repo root) the LLM is allowed to patch. Anything
-# outside is rejected. Extend cautiously.
+# outside is rejected. This now includes the main app source/config surface so
+# self-improvement can update more than backend modules.
 ALLOWED_PATCH_PREFIXES: tuple[str, ...] = (
-    "backend/jarvis/",
+    "backend/",
+    "frontend/",
+    "installer/",
+    "scripts/",
     "user_skills/",
+    "README.md",
+    "config.yaml",
+    "config.default.yaml",
+    "state.json",
 )
 
 # Files the LLM must never touch even if inside an allowed prefix.
 BANNED_PATCH_PATHS: frozenset[str] = frozenset({
     "backend/jarvis/__init__.py",
+    ".git",
 })
 
 
@@ -352,8 +361,9 @@ class PatchManager:
         _git_commit(self.root, [abs_path],
                     f"[jarvis] apply patch {patch_id[:8]}: {record['description']}")
         self._patch_path(patch_id).unlink(missing_ok=True)
-        log.info("patch approved & applied: %s", patch_id)
-        return {"applied": target, "id": patch_id}
+        abs_str = str(abs_path.resolve())
+        log.info("patch approved & applied: %s -> %s", patch_id, abs_str)
+        return {"applied": target, "id": patch_id, "abs_path": abs_str}
 
     def reject(self, patch_id: str) -> None:
         self._patch_path(patch_id).unlink(missing_ok=True)

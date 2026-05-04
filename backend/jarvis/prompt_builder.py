@@ -86,6 +86,52 @@ class PromptBuilder:
         except Exception:
             return "# (file unavailable)\n"
 
+    def _repo_file_index(self) -> str:
+        """Compact list of editable files for self-improvement context."""
+        root = self._repo_root()
+        include_roots = ("backend", "frontend", "installer", "scripts")
+        out: list[str] = []
+        for rel_root in include_roots:
+            base = root / rel_root
+            if not base.exists():
+                continue
+            for p in sorted(base.rglob("*")):
+                if not p.is_file():
+                    continue
+                rel = p.relative_to(root).as_posix()
+                # Skip generated/noisy artifacts from context payload.
+                if any(part in rel for part in ("/__pycache__/", "/build-", "/.git/")):
+                    continue
+                if rel.endswith((".pyc", ".pyo", ".obj", ".pdb", ".dll", ".lib", ".exe")):
+                    continue
+                out.append(rel)
+                if len(out) >= 220:
+                    break
+            if len(out) >= 220:
+                break
+        out.extend(["README.md", "config.yaml", "config.default.yaml", "state.json"])
+        dedup = []
+        seen: set[str] = set()
+        for item in out:
+            if item not in seen:
+                dedup.append(item)
+                seen.add(item)
+        return "\n".join(f"- {p}" for p in dedup)
+
+    @staticmethod
+    def _truncate_for_context(text: str, max_chars: int = 6000) -> str:
+        """Keep core authoring context within smaller-window models."""
+        t = (text or "").strip()
+        if len(t) <= max_chars:
+            return t
+        keep_head = max_chars // 2
+        keep_tail = max_chars - keep_head
+        return (
+            t[:keep_head]
+            + "\n\n# ... context truncated for token budget ...\n\n"
+            + t[-keep_tail:]
+        )
+
     @staticmethod
     def _core_context_files_for_text(text: str) -> list[str]:
         t = text or ""
@@ -93,48 +139,72 @@ class PromptBuilder:
             return [
                 "backend/jarvis/skills/system.py",
                 "backend/jarvis/tool_dispatcher.py",
+                "backend/jarvis/orchestrator.py",
             ]
         # Default core authoring context files.
         return [
+            "backend/jarvis/orchestrator.py",
             "backend/jarvis/tool_dispatcher.py",
             "backend/jarvis/patches.py",
+            "backend/jarvis/prompt_builder.py",
+            "backend/jarvis/server.py",
         ]
 
     def core_authoring_context(self, text: str = "") -> str:
         base = (
             "\n\n=== THIS TURN: CORE EXTENSION ===\n"
-            "The user requested a built-in capability that likely needs backend "
-            "changes (not only user_skills). Use propose_patch targeting "
-            "backend/jarvis/*.py with FULL file content. Target an EXISTING "
-            "backend file (do not invent new file paths). Choose the smallest "
-            "relevant file(s) and include safe validation/error handling. "
+            "The user requested a built-in capability that likely needs core "
+            "changes (not only user_skills). Use propose_patch with FULL file "
+            "text for new_content (backend/frontend/installer/scripts/README/"
+            "config/state).\n"
+            "CRITICAL — do not shrink or rewrite unrelated code:\n"
+            "- Start from the CURRENT on-disk file as the base: copy it verbatim, "
+            "then apply the smallest change that satisfies the request.\n"
+            "- NEVER replace a large module (e.g. backend/jarvis/skills/system.py) "
+            "with a short stub, a toy reimplementation, or a new mini open_app. "
+            "Patches that drop most of the file will break Jarvis at runtime.\n"
+            "- Preserve every existing import, helper, and public symbol unless "
+            "you are deliberately removing one and updating all callers in the "
+            "same patch. For system.py, keep required exports such as "
+            "prewarm_start_menu_cache, set_alias_lookup, open_app, close_app, "
+            "volume, lock, sleep_pc, shutdown, cancel_shutdown, and any Docker/"
+            "Mongo helpers already present.\n"
+            "- Prefer ONE target file when possible. For a new folder name or "
+            "routing tweak, usually extend open_known_folder or the existing "
+            "open_app pipeline — do not invent a parallel launcher.\n"
+            "- Use Windows-correct paths (shell:… for special folders; avoid "
+            "guessing %ProgramFiles%\\Games unless the user asked for that exact "
+            "path). Avoid shell=True except where the codebase already uses it.\n"
             "For Docker/container lifecycle work, prefer editing "
             "backend/jarvis/skills/system.py for behavior and "
             "backend/jarvis/tool_dispatcher.py for wiring; edit "
             "backend/jarvis/orchestrator.py only if you must add route/tool "
             "selection rules. This host is Windows; generate Windows-compatible "
-            "code/commands/paths (PowerShell/cmd semantics, .exe names, "
-            "Windows path handling), not Linux-only shell assumptions. "
-            "Before submitting propose_patch, self-check against the full file "
-            "context below and preserve critical existing symbols/exports. "
+            "code/commands/paths, not Linux-only shell assumptions.\n"
             "Pre-patch checklist: "
-            "(1) choose target from provided context files whenever possible, "
-            "(2) preserve unrelated existing logic, "
-            "(3) output FULL file content for new_content, "
-            "(4) do not invent missing APIs. "
-            "Do not call invented tools; emit propose_patch.\n"
+            "(1) choose the smallest relevant target file, "
+            "(2) keep unrelated logic byte-for-byte identical where possible, "
+            "(3) new_content must be the complete merged file, "
+            "(4) do not invent missing APIs, "
+            "(5) use the editable file index below when unsure. "
+            "Do not call invented tools; emit propose_patch only.\n"
         )
         files = self._core_context_files_for_text(text)
         chunks: list[str] = [
             base,
+            "\nEditable file index (high-signal subset):\n"
+            + self._repo_file_index()
+            + "\n",
             "\nCurrent file context (source of truth before propose_patch):\n",
             "Preferred patch targets for this request:\n"
             + "\n".join(f"- {p}" for p in files) + "\n",
         ]
         for rel in files:
+            raw = self._read_repo_file(rel)
+            trimmed = self._truncate_for_context(raw, max_chars=6000)
             chunks.append(
                 "```python\n# " + rel + "\n"
-                + self._read_repo_file(rel)
+                + trimmed
                 + "\n```\n"
             )
         return "".join(chunks)
@@ -162,6 +232,9 @@ class PromptBuilder:
             "- If the user asks you to create, make, build, write, add, or author a new Jarvis skill, use propose_patch on user_skills/skills.py (not create_user_skill) unless they explicitly want a separate legacy module.",
             "- Exception to the previous rule: if the request is about Docker/containers, shell commands, subprocess, or controlling external desktop binaries, treat it as CORE EXTENSION and return propose_patch for backend/jarvis/*.py even if the user said 'create a skill'.",
             "- Docker/container self-improvement patches should usually target backend/jarvis/skills/system.py (implementation) and backend/jarvis/tool_dispatcher.py (tool wiring). Touch backend/jarvis/orchestrator.py only when adding/changing route or tool selection behavior.",
+            "- propose_patch on backend/jarvis/*.py: merge into the existing file — "
+            "never replace a long module with a short stub. Copy the full current "
+            "file, then edit the smallest region needed.",
             "- OS context: this machine is Windows. Prefer Windows-compatible commands and process names; avoid Linux/macOS-only command patterns unless explicitly requested.",
             "- If the user wants something and NO existing tool can do it, add it to the skills bundle (after web_search for facts you do not know). Do not wait for the user to say 'create a skill'.",
             "- Legacy create_user_skill writes a separate *.py file; use only when appropriate. Same sandbox: allowlisted stdlib; PARAMETERS and handle(args); never for keyboard/tab control (use close_browser_tab).",
@@ -209,6 +282,9 @@ class PromptBuilder:
                 "- Use ONLY propose_patch.\n"
                 "- Target backend/jarvis/<file>.py for built-in capability updates.\n"
                 "- For Docker/container lifecycle behavior, prefer backend/jarvis/skills/system.py and backend/jarvis/tool_dispatcher.py.\n"
+                "- new_content must be the FULL merged file: start from the current "
+                "file text, apply a minimal edit, never replace the whole file with "
+                "a shortened reimplementation.\n"
                 "- Return one valid tool call, no prose/reasoning.\n"
             )
         elif skill_authoring:

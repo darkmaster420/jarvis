@@ -124,7 +124,7 @@ APP_ALIASES: dict[str, str] = {
     "firefox":            "firefox.exe",
     "brave":              "brave.exe",
 
-    # Common web â?? opens in default browser (skips Get-StartApps entirely)
+    # Common web ??? opens in default browser (skips Get-StartApps entirely)
     "youtube":            "https://www.youtube.com",
     "you tube":           "https://www.youtube.com",
     "yt":                 "https://www.youtube.com",
@@ -298,6 +298,41 @@ def _launch_appid(app_id: str) -> None:
     )
 
 
+def open_known_folder(name: str) -> SkillResult:
+    """Open a common Windows user folder by natural name (shell: GUID folders)."""
+    raw = (name or "").strip().lower().rstrip("?.! ")
+    if not raw:
+        return SkillResult("Which folder should I open?", intent="open_folder", success=False)
+    # Intentionally no ``games`` fast-path here so self-improve can add it via patch.
+    folder_map = {
+        "downloads": "shell:Downloads",
+        "download": "shell:Downloads",
+        "documents": "shell:Personal",
+        "document": "shell:Personal",
+        "pictures": "shell:My Pictures",
+        "picture": "shell:My Pictures",
+        "desktop": "shell:Desktop",
+        "music": "shell:My Music",
+        "videos": "shell:My Video",
+    }
+    target = folder_map.get(raw)
+    if not target:
+        return SkillResult(
+            f"I do not have a built-in mapping for '{raw}' folder yet.",
+            intent="open_folder",
+            success=False,
+        )
+    try:
+        _launch(target)
+        return SkillResult(f"Opening {raw} folder.", intent="open_folder", success=True)
+    except Exception as e:
+        return SkillResult(
+            f"Could not open {raw} folder: {e}",
+            intent="open_folder",
+            success=False,
+        )
+
+
 def open_app(name: str) -> SkillResult:
     original = (name or "").strip()
     if not original:
@@ -388,7 +423,7 @@ def close_app(name: str) -> SkillResult:
     target = _resolve_app(original)
     tnorm = (target or "").strip()
     if tnorm.lower().startswith(("http://", "https://")):
-        # "close YouTube" etc. â?? site runs inside the browser, not a "youtube" process
+        # "close YouTube" etc. ??? site runs inside the browser, not a "youtube" process
         from . import web
         r = web.close_browser_tab()
         return SkillResult(

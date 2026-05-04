@@ -10,6 +10,7 @@ struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct IDXGISwapChain;
 struct ID3D11RenderTargetView;
+struct ID3D11ShaderResourceView;
 
 namespace jarvis {
 
@@ -36,6 +37,8 @@ private:
     void drawLogs();
     void drawVersionCorner();
     void refreshLogs();
+    void clearCameraTexture();
+    void syncCameraTextureFromState();
 
     bool createDeviceD3D(HWND hwnd);
     void cleanupDeviceD3D();
@@ -78,6 +81,10 @@ private:
     std::string log_path_;
     std::string layout_path_;
     std::string log_buffer_;
+    ID3D11ShaderResourceView* camera_srv_ = nullptr;
+    int camera_w_ = 0;
+    int camera_h_ = 0;
+    std::string camera_b64_seen_;
     double      log_last_read_ = 0.0;
     bool   running_ = true;
 

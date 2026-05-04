@@ -39,6 +39,60 @@ class ScreenGrab:
     base64_png: str
 
 
+class LiveCameraStream:
+    """Persistent webcam reader for lightweight live HUD streaming."""
+
+    def __init__(self, camera_index: int = 0, max_width: int = 960):
+        self.camera_index = int(camera_index)
+        self.max_width = int(max_width)
+        self._cap = None
+
+    def open(self) -> tuple[bool, str]:
+        if not IS_WIN:
+            return False, "Live camera stream is currently Windows-only."
+        try:
+            import cv2
+        except ImportError as e:
+            return False, f"Live camera stream needs OpenCV (`opencv-python`). {e}"
+        try:
+            backend = cv2.CAP_DSHOW if IS_WIN else 0
+            self._cap = cv2.VideoCapture(self.camera_index, backend)
+            if not self._cap.isOpened():
+                self.close()
+                return False, f"Could not open camera index {self.camera_index}."
+            return True, "Camera stream opened."
+        except Exception as e:
+            self.close()
+            return False, f"Camera stream open failed: {e}"
+
+    def read_frame_b64(self) -> str:
+        if self._cap is None:
+            raise RuntimeError("Camera stream is not open.")
+        import cv2
+
+        ok, frame = self._cap.read()
+        if not ok or frame is None:
+            raise RuntimeError("Could not read frame from camera stream.")
+        h, w = frame.shape[:2]
+        if self.max_width > 0 and w > self.max_width:
+            nh = int(h * (self.max_width / float(w)))
+            frame = cv2.resize(
+                frame, (int(self.max_width), max(1, nh)), interpolation=cv2.INTER_AREA
+            )
+        ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+        if not ok:
+            raise RuntimeError("Failed to encode camera frame.")
+        return base64.b64encode(enc.tobytes()).decode("ascii")
+
+    def close(self) -> None:
+        try:
+            if self._cap is not None:
+                self._cap.release()
+        except Exception:
+            pass
+        self._cap = None
+
+
 def _norm_to_pixel(x: int, y: int) -> tuple[int, int]:
     x = max(0, min(1000, int(x)))
     y = max(0, min(1000, int(y)))
@@ -92,6 +146,72 @@ def capture_screen(max_width: int = 1280) -> SkillResult:
         return SkillResult(
             f"Screen capture failed: {e}", intent="desktop", success=False,
         )
+
+
+def capture_camera_frame(
+    camera_index: int = 0,
+    max_width: int = 960,
+    warmup_s: float = 0.5,
+) -> SkillResult:
+    """Capture a single webcam frame and return a base64-encoded JPEG."""
+    if not IS_WIN:
+        return SkillResult(
+            "Camera capture is currently supported on Windows only.",
+            intent="camera", success=False,
+        )
+    try:
+        import cv2
+    except ImportError as e:
+        return SkillResult(
+            f"Camera capture needs OpenCV (`opencv-python`). {e}",
+            intent="camera", success=False,
+        )
+
+    cap = None
+    try:
+        backend = cv2.CAP_DSHOW if IS_WIN else 0
+        cap = cv2.VideoCapture(int(camera_index), backend)
+        if not cap.isOpened():
+            return SkillResult(
+                f"Could not open camera index {camera_index}.",
+                intent="camera", success=False,
+            )
+
+        # Let auto-exposure/auto-focus settle briefly for a cleaner first frame.
+        deadline = time.monotonic() + max(0.2, float(warmup_s))
+        while time.monotonic() < deadline:
+            cap.read()
+            time.sleep(0.05)
+
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            return SkillResult(
+                "Could not read a frame from the camera.",
+                intent="camera", success=False,
+            )
+
+        h, w = frame.shape[:2]
+        if max_width > 0 and w > max_width:
+            nh = int(h * (max_width / float(w)))
+            frame = cv2.resize(frame, (int(max_width), max(1, nh)), interpolation=cv2.INTER_AREA)
+
+        ok, enc = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 88])
+        if not ok:
+            return SkillResult(
+                "Camera frame encode failed.",
+                intent="camera", success=False,
+            )
+        b64 = base64.b64encode(enc.tobytes()).decode("ascii")
+        return SkillResult(b64, intent="camera_frame", success=True)
+    except Exception as e:
+        log.exception("capture_camera_frame failed: %s", e)
+        return SkillResult(f"Camera capture failed: {e}", intent="camera", success=False)
+    finally:
+        try:
+            if cap is not None:
+                cap.release()
+        except Exception:
+            pass
 
 
 def get_last_grab_for_prompt() -> str:

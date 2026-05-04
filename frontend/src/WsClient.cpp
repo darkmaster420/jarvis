@@ -309,6 +309,8 @@ void WsClient::dispatch(const std::string& payload) {
             state_.setStatus("");
         } else if (ev == "reply") {
             state_.setReply(j.value("text", ""));
+        } else if (ev == "camera_frame") {
+            state_.setCameraFrame(j.value("image_b64", ""));
         } else if (ev == "speaking_start") {
             state_.state = HudState::Speaking;
         } else if (ev == "speaking_end") {
@@ -367,7 +369,12 @@ void WsClient::dispatch(const std::string& payload) {
                 }
             }
         } else if (ev == "patch_applied") {
-            state_.setStatus("Patch applied: " + j.value("target", ""));
+            std::string tgt   = j.value("target", "");
+            std::string apath = j.value("abs_path", "");
+            if (!apath.empty())
+                state_.setStatus("Patch applied: " + tgt + " | " + apath);
+            else
+                state_.setStatus("Patch applied: " + tgt);
         } else if (ev == "error") {
             state_.setStatus("Error: " + j.value("message", ""));
         }
