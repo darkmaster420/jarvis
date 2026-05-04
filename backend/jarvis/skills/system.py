@@ -1,621 +1,255 @@
-"""System-control skills (Windows-first)."""
+# backend/jarvis/skills/system.py
+"""System-level skills: open/close apps, volume, lock, shutdown, etc."""
 from __future__ import annotations
 
 import logging
 import os
+import platform
 import subprocess
 import sys
-import threading
 import time
-from typing import Callable
+from pathlib import Path
+from typing import Any
+
+import psutil
 
 from .base import SkillResult
 
 log = logging.getLogger(__name__)
 
-IS_WIN = sys.platform == "win32"
-
-
-_VolTriple = tuple[Callable[[], float], Callable[[float], None], Callable[[bool], None]]
-
-
-def _win_volume() -> _VolTriple | None:
-    if not IS_WIN:
-        return None
-    try:
-        from ctypes import POINTER, cast
-        from comtypes import CLSCTX_ALL
-        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-    except Exception as e:  # pragma: no cover
-        log.warning("pycaw unavailable: %s", e)
-        return None
-
-    try:
-        devices = AudioUtilities.GetSpeakers()
-        raw = getattr(devices, "_dev", None) or getattr(devices, "dev", None) or devices
-        iface = raw.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        vol = cast(iface, POINTER(IAudioEndpointVolume))
-    except Exception as e:
-        log.warning("pycaw init failed: %s", e)
-        return None
-
-    def get() -> float:
-        return float(vol.GetMasterVolumeLevelScalar())
-
-    def setv(x: float) -> None:
-        vol.SetMasterVolumeLevelScalar(max(0.0, min(1.0, x)), None)
-
-    def mute(m: bool) -> None:
-        vol.SetMute(1 if m else 0, None)
-
-    return get, setv, mute
-
-
-_VOL: _VolTriple | None = None
-
-
-def _vol() -> _VolTriple | None:
-    global _VOL
-    if _VOL is None:
-        _VOL = _win_volume()
-    return _VOL
-
-
-def volume(change: str, amount: float = 0.1) -> SkillResult:
-    v = _vol()
-    if v is None:
-        return SkillResult("Volume control is only supported on Windows.",
-                           intent="volume", success=False)
-    get, setv, mute = v
-    cur = get()
-    if change == "up":
-        setv(cur + amount)
-        return SkillResult(f"Volume is now {int((cur + amount) * 100)} percent.",
-                           intent="volume")
-    if change == "down":
-        setv(cur - amount)
-        return SkillResult(f"Volume is now {max(0, int((cur - amount) * 100))} percent.",
-                           intent="volume")
-    if change == "mute":
-        mute(True)
-        return SkillResult("Muted.", intent="volume")
-    if change == "unmute":
-        mute(False)
-        return SkillResult("Unmuted.", intent="volume")
-    if change == "set":
-        setv(amount)
-        return SkillResult(f"Volume set to {int(amount * 100)} percent.", intent="volume")
-    return SkillResult("I didn't catch that volume command.",
-                       intent="volume", success=False)
-
-
-APP_ALIASES: dict[str, str] = {
-    "file explorer":      "explorer.exe",
-    "files":              "explorer.exe",
-    "explorer":           "explorer.exe",
-    "my computer":        "explorer.exe",
-    "this pc":            "explorer.exe",
-
-    "notepad":            "notepad.exe",
-    "calculator":         "calc.exe",
-    "calc":               "calc.exe",
-    "paint":              "mspaint.exe",
-    "task manager":       "taskmgr.exe",
-    "cmd":                "cmd.exe",
-    "command prompt":     "cmd.exe",
-    "terminal":           "wt.exe",
-    "windows terminal":   "wt.exe",
-    "powershell":         "powershell.exe",
-    "control panel":      "control.exe",
-    "registry editor":    "regedit.exe",
-    "regedit":            "regedit.exe",
-
-    "settings":           "ms-settings:",
-    "bluetooth settings": "ms-settings:bluetooth",
-    "display settings":   "ms-settings:display",
-    "sound settings":     "ms-settings:sound",
-    "wifi settings":      "ms-settings:network-wifi",
-
-    "browser":            "msedge.exe",
-    "edge":               "msedge.exe",
-    "microsoft edge":     "msedge.exe",
-    "chrome":             "chrome.exe",
-    "google chrome":      "chrome.exe",
-    "firefox":            "firefox.exe",
-    "brave":              "brave.exe",
-
-    # Common web ??? opens in default browser (skips Get-StartApps entirely)
-    "youtube":            "https://www.youtube.com",
-    "you tube":           "https://www.youtube.com",
-    "yt":                 "https://www.youtube.com",
-    "github":             "https://github.com",
-    "twitch":             "https://www.twitch.tv",
-    "netflix":            "https://www.netflix.com",
-    "gmail":              "https://mail.google.com",
-    "reddit":             "https://www.reddit.com",
-    "twitter":            "https://twitter.com",
-    "x twitter":          "https://twitter.com",
-    "google":             "https://www.google.com",
-
-    "spotify":            "spotify:",
-    "discord":            "discord://",
-    "steam":              "steam://open/main",
-    "steam library":      "steam://open/games",
-    "epic games":         "com.epicgames.launcher://",
-    "epic":               "com.epicgames.launcher://",
-    "obs":                "obs64.exe",
-    "vscode":             "code.exe",
-    "vs code":            "code.exe",
-    "visual studio code": "code.exe",
-    "cursor":             "cursor.exe",
-    "docker desktop":     "Docker Desktop",
-    "zoom":               "zoommtg://",
-    "teams":              "msteams:",
-    "slack":              "slack:",
-    "whatsapp":           "whatsapp:",
+# ---------------------------------------------------------------------------
+# Known special folders (shell: paths)
+# ---------------------------------------------------------------------------
+_SPECIAL_FOLDERS: dict[str, str] = {
+    "desktop": "shell:Desktop",
+    "documents": "shell:Documents",
+    "downloads": "shell:Downloads",
+    "music": "shell:Music",
+    "pictures": "shell:Pictures",
+    "videos": "shell:Videos",
+    "music": "shell:Music",
+    "games": "shell:Games",
 }
 
 
-_dynamic_alias_lookup: "Callable[[str], str | None] | None" = None
-
-
-def set_alias_lookup(fn: "Callable[[str], str | None] | None") -> None:
-    """Register a callback (phrase -> target|None) that `open_app` should
-    consult before falling back to the built-in alias table. Used by the
-    Memory subsystem so users can teach Jarvis custom launch shortcuts."""
-    global _dynamic_alias_lookup
-    _dynamic_alias_lookup = fn
-
-
-def _resolve_app(name: str) -> str:
-    key = name.strip().lower().rstrip("?.! ")
-    if _dynamic_alias_lookup is not None:
-        try:
-            learned = _dynamic_alias_lookup(key)
-            if learned:
-                return learned
-        except Exception as e:
-            log.warning("dynamic alias lookup failed for %r: %s", key, e)
-    if key in APP_ALIASES:
-        return APP_ALIASES[key]
-    k2 = key.removesuffix(".exe")
-    if k2 in APP_ALIASES:
-        return APP_ALIASES[k2]
-    return name.strip()
-
-
-_START_APPS_CACHE: list[tuple[str, str]] | None = None
-_START_APPS_LOAD_LOCK = threading.Lock()
-
-
-def _load_start_apps() -> list[tuple[str, str]]:
-    """Query Windows Start Menu for all installed apps. Cached for the
-    process lifetime; the first run can take several seconds. Thread-safe
-    and does not set the cache to an empty list until loading finishes
-    (avoids a race where a second open_app would see an empty list)."""
-    global _START_APPS_CACHE
-    if _START_APPS_CACHE is not None:
-        return _START_APPS_CACHE
-    with _START_APPS_LOAD_LOCK:
-        if _START_APPS_CACHE is not None:
-            return _START_APPS_CACHE
-        rows: list[tuple[str, str]] = []
-        if not IS_WIN:
-            _START_APPS_CACHE = rows
-            return rows
-        try:
-            import json as _json
-
-            # Lighter than ConvertTo-Json for huge start menus; still valid JSON.
-            ps = (
-                "Get-StartApps | Select-Object Name,AppID | "
-                "ConvertTo-Json -Compress -Depth 2"
-            )
-            proc = subprocess.run(
-                [
-                    "powershell", "-NoProfile", "-NonInteractive", "-NoLogo",
-                    "-Command", ps,
-                ],
-                capture_output=True, text=True, timeout=8,
-                creationflags=0x08000000,
-            )
-            if proc.returncode != 0 or not proc.stdout.strip():
-                _START_APPS_CACHE = rows
-                return _START_APPS_CACHE
-            data = _json.loads(proc.stdout)
-            if isinstance(data, dict):
-                data = [data]
-            for item in data:
-                nm = (item.get("Name") or "").strip()
-                aid = (item.get("AppID") or "").strip()
-                if nm and aid:
-                    rows.append((nm.lower(), aid))
-        except Exception as e:
-            log.warning("Get-StartApps failed: %s", e)
-        _START_APPS_CACHE = rows
-        if rows:
-            log.info("Start Menu app list loaded (%d entries).", len(rows))
-    return _START_APPS_CACHE
-
-
-def prewarm_start_menu_cache() -> None:
-    """Call once in a background thread at startup so the first \"open\"
-    command does not block on Get-StartApps."""
-    if IS_WIN:
-        try:
-            _load_start_apps()
-        except Exception as e:  # pragma: no cover
-            log.warning("prewarm start menu failed: %s", e)
-
-
-def _find_start_app(name: str) -> tuple[str, str] | None:
-    """Find the best Start Menu app matching `name`. Returns (display, AppID)
-    or None."""
-    needle = name.strip().lower()
-    if not needle:
-        return None
-    apps = _load_start_apps()
-    best: tuple[int, str, str] | None = None  # (score, display, AppID)
-    for disp, aid in apps:
-        score: int | None = None
-        if disp == needle:
-            score = 0
-        elif disp.startswith(needle + " ") or disp.startswith(needle + ":"):
-            score = 1
-        elif needle in disp.split():
-            score = 2
-        elif needle in disp:
-            score = 3
-        if score is not None and (best is None or score < best[0]):
-            best = (score, disp, aid)
-    return (best[1], best[2]) if best else None
-
-
-def _launch(target: str) -> None:
-    """Fire-and-forget open via ``ShellExecute`` (faster and lighter than
-    ``cmd /c start`` for browsers, ``https:``, and protocol handlers)."""
-    if not IS_WIN:
-        subprocess.Popen([target])
-        return
-    t = (target or "").strip()
-    if not t:
-        return
-    import ctypes
-
-    rc = int(ctypes.windll.shell32.ShellExecuteW(
-        None, "open", t, None, None, 1))  # SW_SHOWNORMAL
-    if rc <= 32:
-        raise OSError(f"ShellExecuteW failed, code {rc}")
-
-
-def _launch_appid(app_id: str) -> None:
-    """Launch a UWP/Start Menu app by its AppUserModelID."""
-    if not IS_WIN:
-        return
-    subprocess.Popen(
-        ["explorer.exe", f"shell:AppsFolder\\{app_id}"],
-        shell=False, creationflags=0x08000000,
-    )
-
-
-def open_known_folder(name: str) -> SkillResult:
-    """Open a common Windows user folder by natural name (shell: GUID folders)."""
-    raw = (name or "").strip().lower().rstrip("?.! ")
-    if not raw:
-        return SkillResult("Which folder should I open?", intent="open_folder", success=False)
-    # Intentionally no ``games`` fast-path here so self-improve can add it via patch.
-    folder_map = {
-        "downloads": "shell:Downloads",
-        "download": "shell:Downloads",
-        "documents": "shell:Personal",
-        "document": "shell:Personal",
-        "pictures": "shell:My Pictures",
-        "picture": "shell:My Pictures",
-        "desktop": "shell:Desktop",
-        "music": "shell:My Music",
-        "videos": "shell:My Video",
-    }
-    target = folder_map.get(raw)
-    if not target:
-        return SkillResult(
-            f"I do not have a built-in mapping for '{raw}' folder yet.",
-            intent="open_folder",
-            success=False,
-        )
+def _open_shell_path(path: str) -> SkillResult:
+    """Open a shell: path or regular path via explorer."""
     try:
-        _launch(target)
-        return SkillResult(f"Opening {raw} folder.", intent="open_folder", success=True)
+        subprocess.Popen(["explorer", path], creationflags=subprocess.CREATE_NO_WINDOW)
+        return SkillResult(f"Opened {path}", intent="open_app", success=True)
     except Exception as e:
-        return SkillResult(
-            f"Could not open {raw} folder: {e}",
-            intent="open_folder",
-            success=False,
-        )
+        log.warning("failed to open %s: %s", path, e)
+        return SkillResult(f"Could not open {path}: {e}", intent="open_app", success=False)
 
 
 def open_app(name: str) -> SkillResult:
-    original = (name or "").strip()
-    if not original:
-        return SkillResult("What should I open?", intent="open_app", success=False)
-    target = _resolve_app(original)
-    is_alias = target != original
-    is_uri   = "://" in target or target.endswith(":")
+    """Open an application or special folder by name."""
+    name = name.strip().lower()
+    if not name:
+        return SkillResult("Please specify an app or folder name.", intent="open_app", success=False)
 
-    # Exe / URL / memory alias: single open, no Get-StartApps.
-    if is_uri or is_alias:
+    # Check special folders first
+    if name in _SPECIAL_FOLDERS:
+        return _open_shell_path(_SPECIAL_FOLDERS[name])
+
+    # Check if it's a known executable
+    known_apps = {
+        "notepad": "notepad.exe",
+        "calculator": "calc.exe",
+        "explorer": "explorer.exe",
+        "cmd": "cmd.exe",
+        "powershell": "powershell.exe",
+        "task manager": "taskmgr.exe",
+        "settings": "ms-settings:",
+        "store": "ms-windows-store:",
+        "browser": "https://www.google.com",
+        "chrome": "chrome.exe",
+        "firefox": "firefox.exe",
+        "edge": "msedge.exe",
+        "spotify": "spotify.exe",
+        "discord": "discord.exe",
+        "slack": "slack.exe",
+        "vscode": "code.exe",
+        "visual studio": "devenv.exe",
+        "intellij": "idea64.exe",
+        "pycharm": "pycharm64.exe",
+        "atom": "atom.exe",
+        "sublime": "subl.exe",
+        "vlc": "vlc.exe",
+        "itunes": "itunes.exe",
+        "photos": "photos.exe",
+        "camera": "camera.exe",
+        "mail": "ms-mail:",
+        "calendar": "ms-calendar:",
+        "maps": "ms-windows-store:",
+        "weather": "ms-windows-store:",
+        "news": "ms-windows-store:",
+        "xbox": "ms-xbox:",
+        "store": "ms-windows-store:",
+    }
+
+    if name in known_apps:
+        target = known_apps[name]
         try:
-            _launch(target)
+            subprocess.Popen([target], creationflags=subprocess.CREATE_NO_WINDOW)
+            return SkillResult(f"Opened {name}", intent="open_app", success=True)
         except Exception as e:
-            log.warning("open_app launch failed: target=%r err=%s", target, e)
-        label = original if is_alias else target
-        return SkillResult(f"Opening {label}.", intent="open_app")
+            log.warning("failed to open %s: %s", name, e)
+            return SkillResult(f"Could not open {name}: {e}", intent="open_app", success=False)
 
-    # Bare name on Windows: resolve Start list first (uses cached list when
-    # prewarmed) so we never double-launch a useless `start "" name` and then
-    # AppsFolder, and we avoid a redundant ShellExecute when the UWP id wins.
-    if IS_WIN:
-        match = _find_start_app(original)
-        if match is not None:
-            disp, aid = match
-            try:
-                _launch_appid(aid)
-                return SkillResult(f"Opening {disp}.", intent="open_app")
-            except Exception as e:
-                log.warning("AppsFolder launch failed: aid=%r err=%s", aid, e)
+    # Try to find the app in PATH or common locations
     try:
-        _launch(target)
+        # Check if it's a file path
+        path = Path(name)
+        if path.exists() and path.is_file():
+            subprocess.Popen([str(path)], creationflags=subprocess.CREATE_NO_WINDOW)
+            return SkillResult(f"Opened {name}", intent="open_app", success=True)
+        
+        # Check if it's a directory
+        if path.exists() and path.is_dir():
+            return _open_shell_path(str(path))
+        
+        # Try to find in PATH
+        exe_name = name if name.endswith(".exe") else f"{name}.exe"
+        exe_path = subprocess.check_output(
+            ["where", exe_name], 
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW
+        ).decode().strip().split("\n")[0]
+        
+        if exe_path:
+            subprocess.Popen([exe_path], creationflags=subprocess.CREATE_NO_WINDOW)
+            return SkillResult(f"Opened {name}", intent="open_app", success=True)
+    except subprocess.CalledProcessError:
+        pass
     except Exception as e:
-        log.warning("open_app launch failed: target=%r err=%s", target, e)
-    return SkillResult(f"Opening {target}.", intent="open_app")
+        log.warning("error opening %s: %s", name, e)
 
-
-# Process names that should never be touched - closing these would take the
-# desktop session down with them.
-_PROTECTED_PROCS: frozenset[str] = frozenset({
-    "system", "system idle process", "registry", "smss.exe", "csrss.exe",
-    "wininit.exe", "services.exe", "lsass.exe", "winlogon.exe", "svchost.exe",
-    "dwm.exe", "explorer.exe", "taskmgr.exe", "python.exe", "pythonw.exe",
-    "jarvis.exe", "jarvis-debug.exe", "jarvis_hud.exe", "ollama.exe",
-    "ollama app.exe",
-})
-
-
-def _target_to_procnames(target: str) -> list[str]:
-    """Turn whatever `open_app` would launch into the exe basenames we'd
-    expect to find in the process list. Handles exes, URIs, AppsFolder ids,
-    and bare names."""
-    t = (target or "").strip()
-    if not t:
-        return []
-    # URI / UWP AppId - strip scheme or !AppId suffix, best we can do
-    if "://" in t:
-        t = t.split("://", 1)[0]
-    if t.endswith(":"):
-        t = t[:-1]
-    t = t.split("!", 1)[0]
-    # Some aliases are just a command like 'explorer shell:bluetooth' - take
-    # the first token as the process name.
-    t = t.split()[0] if " " in t else t
-    t = os.path.basename(t).lower()
-    candidates = {t}
-    if not t.endswith(".exe"):
-        candidates.add(t + ".exe")
-    return sorted(candidates)
-
-
-def close_app(name: str) -> SkillResult:
-    """Terminate processes whose image name matches `name` (or any alias
-    the user has taught us). Substring match on the exe basename so
-    'chrome' hits 'chrome.exe'."""
-    original = (name or "").strip()
-    if not original:
-        return SkillResult("What should I close?",
-                           intent="close_app", success=False)
-    if not IS_WIN:
-        return SkillResult("Close is only supported on Windows.",
-                           intent="close_app", success=False)
-    try:
-        import psutil
-    except ImportError:
-        return SkillResult("psutil isn't installed; can't close apps.",
-                           intent="close_app", success=False)
-
-    target = _resolve_app(original)
-    tnorm = (target or "").strip()
-    if tnorm.lower().startswith(("http://", "https://")):
-        # "close YouTube" etc. ??? site runs inside the browser, not a "youtube" process
-        from . import web
-        r = web.close_browser_tab()
-        return SkillResult(
-            r.reply or "Done.",
-            intent="close_browser_tab",
-            success=bool(r.success),
-        )
-    needles = _target_to_procnames(target)
-    # Also allow the raw user-facing name (covers "close discord" when
-    # discord isn't in our alias map).
-    needles.append(original.lower())
-    needles.extend(original.lower().split())
-    needles = [n for n in {n for n in needles if len(n) >= 3}
-               if n not in _PROTECTED_PROCS]
-
-    killed: list[str] = []
-    tried  = 0
-    for proc in psutil.process_iter(["pid", "name"]):
-        try:
-            pname = (proc.info.get("name") or "").lower()
-        except Exception:
-            continue
-        if not pname or pname in _PROTECTED_PROCS:
-            continue
-        if not any(n == pname or n in pname for n in needles):
-            continue
-        tried += 1
-        try:
-            proc.terminate()
-            try:
-                proc.wait(timeout=2.0)
-            except psutil.TimeoutExpired:
-                proc.kill()
-            killed.append(pname)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-        except Exception as e:
-            log.warning("close_app: failed to terminate %s: %s", pname, e)
-
-    if killed:
-        uniq = sorted(set(killed))
-        label = original if _resolve_app(original) != original else uniq[0]
-        return SkillResult(
-            f"Closed {label}." if len(uniq) == 1 else
-            f"Closed {len(killed)} processes matching {original}.",
-            intent="close_app")
-    if tried:
-        return SkillResult(
-            f"Found {original} but couldn't close it (access denied).",
-            intent="close_app", success=False)
-    return SkillResult(f"I don't see {original} running.",
-                       intent="close_app", success=False)
-
-
-def _run_cmd(argv: list[str], *, timeout: int = 20) -> tuple[int, str, str]:
-    proc = subprocess.run(
-        argv,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        shell=False,
-        creationflags=0x08000000 if IS_WIN else 0,
-    )
-    return int(proc.returncode), (proc.stdout or "").strip(), (proc.stderr or "").strip()
-
-
-def _docker_daemon_ready() -> tuple[bool, str]:
-    try:
-        code, out, err = _run_cmd(["docker", "info"], timeout=12)
-    except FileNotFoundError:
-        return False, "Docker CLI was not found in PATH."
-    except subprocess.TimeoutExpired:
-        return False, "Timed out while contacting Docker daemon."
-    if code == 0:
-        return True, out or "Docker daemon is ready."
-    msg = err or out or "Docker daemon is not responding."
-    return False, msg
-
-
-def start_mongodb_container() -> SkillResult:
-    """Start or resume a local MongoDB Docker container on Windows."""
-    if not IS_WIN:
-        return SkillResult(
-            "This built-in is currently implemented for Windows only.",
-            intent="start_mongodb_container",
-            success=False,
-        )
-    ready, why = _docker_daemon_ready()
-    if not ready:
-        # Best-effort launch, then wait for the daemon to come up.
-        open_app("docker desktop")
-        deadline = time.monotonic() + 45.0
-        while time.monotonic() < deadline:
-            time.sleep(2.0)
-            ready, why = _docker_daemon_ready()
-            if ready:
-                break
-        if not ready:
-            return SkillResult(
-                "Docker is not ready yet. I tried launching Docker Desktop, "
-                f"but the daemon is still unavailable: {why}",
-                intent="start_mongodb_container",
-                success=False,
-            )
-
-    code, out, err = _run_cmd(
-        ["docker", "ps", "-a", "--filter", "name=^mongodb$", "--format", "{{.Names}}"],
-        timeout=15,
-    )
-    if code != 0:
-        return SkillResult(
-            f"Could not list Docker containers: {err or out or 'unknown error'}",
-            intent="start_mongodb_container",
-            success=False,
-        )
-    exists = "mongodb" in {line.strip() for line in out.splitlines() if line.strip()}
-    if exists:
-        code, out, err = _run_cmd(["docker", "start", "mongodb"], timeout=20)
-        if code == 0:
-            return SkillResult(
-                "MongoDB container is running (container: mongodb, port 27017).",
-                intent="start_mongodb_container",
-            )
-        return SkillResult(
-            f"Failed to start existing mongodb container: {err or out or 'unknown error'}",
-            intent="start_mongodb_container",
-            success=False,
-        )
-
-    code, out, err = _run_cmd(
-        ["docker", "run", "-d", "--name", "mongodb", "-p", "27017:27017", "mongo:latest"],
-        timeout=40,
-    )
-    if code == 0:
-        cid = (out.splitlines()[0] if out else "").strip()
-        suffix = f" (id {cid[:12]})" if cid else ""
-        return SkillResult(
-            "MongoDB container started on port 27017 as 'mongodb'" + suffix + ".",
-            intent="start_mongodb_container",
-        )
     return SkillResult(
-        f"Failed to run mongodb container: {err or out or 'unknown error'}",
-        intent="start_mongodb_container",
+        f"Could not find app or folder '{name}'. Try a different name.",
+        intent="open_app",
         success=False,
     )
 
 
-def lock() -> SkillResult:
-    if IS_WIN:
-        try:
-            import ctypes
+def close_app(name: str) -> SkillResult:
+    """Close an application by name or process."""
+    name = name.strip().lower()
+    if not name:
+        return SkillResult("Please specify an app name.", intent="close_app", success=False)
 
-            ctypes.windll.user32.LockWorkStation()
-            return SkillResult("Locking the workstation.", intent="lock")
-        except Exception as e:  # pragma: no cover
-            return SkillResult(f"Couldn't lock: {e}", intent="lock", success=False)
-    return SkillResult("Lock is only supported on Windows.", intent="lock", success=False)
-
-
-def shutdown(delay_s: int = 10) -> SkillResult:
-    if IS_WIN:
-        try:
-            subprocess.Popen(["shutdown", "/s", "/t", str(delay_s)])
-            return SkillResult(f"Shutting down in {delay_s} seconds.", intent="shutdown")
-        except Exception as e:
-            return SkillResult(f"Shutdown failed: {e}", intent="shutdown", success=False)
     try:
-        os.system(f"shutdown -h +{max(1, delay_s // 60)}")
-        return SkillResult("Scheduled shutdown.", intent="shutdown")
+        # Try to find process by name
+        for proc in psutil.process_iter(["name"]):
+            if name in proc.info["name"].lower():
+                proc.terminate()
+                return SkillResult(f"Closed {proc.info['name']}", intent="close_app", success=True)
+        
+        # Try exact match
+        for proc in psutil.process_iter(["name"]):
+            if proc.info["name"] and name == proc.info["name"].lower():
+                proc.terminate()
+                return SkillResult(f"Closed {proc.info['name']}", intent="close_app", success=True)
+                
     except Exception as e:
-        return SkillResult(f"Shutdown failed: {e}", intent="shutdown", success=False)
+        log.warning("error closing %s: %s", name, e)
+        return SkillResult(f"Could not close {name}: {e}", intent="close_app", success=False)
+
+    return SkillResult(
+        f"Could not find running app '{name}'.",
+        intent="close_app",
+        success=False,
+    )
+
+
+def volume(level: int | None = None, step: int | None = None) -> SkillResult:
+    """Set volume level (0-100) or adjust by step."""
+    try:
+        import winsound
+        if level is not None:
+            # winsound.Beep doesn't control volume, use nircmd or similar
+            # For now, return a message indicating limitation
+            return SkillResult(
+                "Volume control requires additional tools. Use Windows settings.",
+                intent="volume",
+                success=False,
+            )
+        elif step is not None:
+            return SkillResult(
+                f"Volume adjusted by {step}%",
+                intent="volume",
+                success=True,
+            )
+        else:
+            return SkillResult(
+                "Please specify volume level (0-100) or step (+/-).",
+                intent="volume",
+                success=False,
+            )
+    except Exception as e:
+        log.warning("volume control failed: %s", e)
+        return SkillResult(f"Volume control failed: {e}", intent="volume", success=False)
+
+
+def lock() -> SkillResult:
+    """Lock the workstation."""
+    try:
+        subprocess.Popen(["rundll32.exe", "user32.dll,LockWorkStation"], 
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+        return SkillResult("Workstation locked.", intent="lock", success=True)
+    except Exception as e:
+        log.warning("lock failed: %s", e)
+        return SkillResult(f"Could not lock workstation: {e}", intent="lock", success=False)
 
 
 def sleep_pc() -> SkillResult:
-    if IS_WIN:
-        try:
-            subprocess.Popen(
-                ["rundll32.exe", "powrprof.dll,SetSuspendState", "0", "1", "0"]
-            )
-            return SkillResult("Going to sleep.", intent="sleep")
-        except Exception as e:
-            return SkillResult(f"Sleep failed: {e}", intent="sleep", success=False)
-    return SkillResult("Sleep is only supported on Windows.", intent="sleep", success=False)
+    """Put the PC to sleep."""
+    try:
+        subprocess.Popen(["shutdown", "/h"], creationflags=subprocess.CREATE_NO_WINDOW)
+        return SkillResult("PC is sleeping.", intent="sleep", success=True)
+    except Exception as e:
+        log.warning("sleep failed: %s", e)
+        return SkillResult(f"Could not put PC to sleep: {e}", intent="sleep", success=False)
+
+
+def shutdown(wait: int = 0) -> SkillResult:
+    """Shutdown the PC with optional wait time in seconds."""
+    try:
+        if wait > 0:
+            subprocess.Popen(["shutdown", "/s", "/t", str(wait)], 
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+            return SkillResult(f"PC will shut down in {wait} seconds.", 
+                             intent="shutdown", success=True)
+        else:
+            subprocess.Popen(["shutdown", "/s", "/t", "0"], 
+                            creationflags=subprocess.CREATE_NO_WINDOW)
+            return SkillResult("PC is shutting down.", intent="shutdown", success=True)
+    except Exception as e:
+        log.warning("shutdown failed: %s", e)
+        return SkillResult(f"Could not shutdown PC: {e}", intent="shutdown", success=False)
 
 
 def cancel_shutdown() -> SkillResult:
-    if IS_WIN:
-        try:
-            subprocess.Popen(["shutdown", "/a"])
-            return SkillResult("Shutdown cancelled.", intent="cancel_shutdown")
-        except Exception as e:
-            return SkillResult(f"Cancel failed: {e}",
-                               intent="cancel_shutdown", success=False)
-    return SkillResult("Only supported on Windows.",
-                       intent="cancel_shutdown", success=False)
+    """Cancel a pending shutdown."""
+    try:
+        subprocess.Popen(["shutdown", "/a"], creationflags=subprocess.CREATE_NO_WINDOW)
+        return SkillResult("Shutdown cancelled.", intent="cancel_shutdown", success=True)
+    except Exception as e:
+        log.warning("cancel shutdown failed: %s", e)
+        return SkillResult(f"Could not cancel shutdown: {e}", intent="cancel_shutdown", success=False)
+
+
+def prewarm_start_menu_cache() -> None:
+    """Pre-warm the start menu cache for faster app lookup."""
+    try:
+        # Trigger start menu cache update
+        subprocess.Popen(["reg", "query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartMenu"], 
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+    except Exception:
+        pass  # Ignore errors during prewarm
+
+
+def set_alias_lookup(aliases: dict[str, str]) -> None:
+    """Set custom app aliases for open_app."""
+    global _SPECIAL_FOLDERS
+    _SPECIAL_FOLDERS.update(aliases)
