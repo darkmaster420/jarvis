@@ -303,7 +303,6 @@ def open_known_folder(name: str) -> SkillResult:
     raw = (name or "").strip().lower().rstrip("?.! ")
     if not raw:
         return SkillResult("Which folder should I open?", intent="open_folder", success=False)
-    # Intentionally no ``games`` fast-path here so self-improve can add it via patch.
     folder_map = {
         "downloads": "shell:Downloads",
         "download": "shell:Downloads",
@@ -314,6 +313,8 @@ def open_known_folder(name: str) -> SkillResult:
         "desktop": "shell:Desktop",
         "music": "shell:My Music",
         "videos": "shell:My Video",
+        "games": "shell:Games",
+        "game": "shell:Games",
     }
     target = folder_map.get(raw)
     if not target:

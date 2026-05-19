@@ -81,7 +81,7 @@ set(JARVIS_SOURCES
 # Shown in the HUD (bottom-right) and should match the Windows installer
 # (installer/jarvis.iss) when you cut a release. CACHE FORCE so a stale
 # JARVIS_HUD_VERSION from an older first configure cannot stick at e.g. 0.2.0.
-set(JARVIS_HUD_VERSION "0.2.64" CACHE STRING "HUD / release version label" FORCE)
+set(JARVIS_HUD_VERSION "0.2.65" CACHE STRING "HUD / release version label" FORCE)
 
 function(jarvis_hud_link_libs tgt)
     target_compile_definitions(${tgt} PRIVATE
